@@ -2,6 +2,6 @@
 **Vignesh Saravanan and Mohana Pamidimukkala**
 **Trustworthy Engineered Autonomy Lab**
 
-###Architecture Info
+### Architecture Info
 
 
