@@ -1,0 +1,27 @@
+[0.051s] Invoking command in '/sim_ws/src/lidar_processing/build/lidar_processing': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector /usr/bin/cmake --build /sim_ws/src/lidar_processing/build/lidar_processing -- -j12 -l12
+[0.133s] [35m[1mScanning dependencies of target clustering[0m
+[0.182s] [ 75%] [32mBuilding CXX object CMakeFiles/clustering.dir/src/clustering.cpp.o[0m
+[0.182s] [ 75%] Built target scan_to_cloud_node
+[11.429s] [100%] [32m[1mLinking CXX executable clustering[0m
+[13.372s] [100%] Built target clustering
+[13.390s] Invoked command in '/sim_ws/src/lidar_processing/build/lidar_processing' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector /usr/bin/cmake --build /sim_ws/src/lidar_processing/build/lidar_processing -- -j12 -l12
+[13.458s] Invoking command in '/sim_ws/src/lidar_processing/build/lidar_processing': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector /usr/bin/cmake --install /sim_ws/src/lidar_processing/build/lidar_processing
+[13.467s] -- Install configuration: ""
+[13.467s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/scan_to_cloud_node
+[13.468s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/clustering
+[13.468s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/ament_index/resource_index/package_run_dependencies/lidar_processing
+[13.469s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/ament_index/resource_index/parent_prefix_path/lidar_processing
+[13.469s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/ament_prefix_path.sh
+[13.469s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/ament_prefix_path.dsv
+[13.469s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/path.sh
+[13.470s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/path.dsv
+[13.470s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.bash
+[13.470s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.sh
+[13.470s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.zsh
+[13.470s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.dsv
+[13.470s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/package.dsv
+[13.471s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/ament_index/resource_index/packages/lidar_processing
+[13.471s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/cmake/lidar_processingConfig.cmake
+[13.471s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/cmake/lidar_processingConfig-version.cmake
+[13.471s] -- Up-to-date: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/package.xml
+[13.476s] Invoked command in '/sim_ws/src/lidar_processing/build/lidar_processing' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector /usr/bin/cmake --install /sim_ws/src/lidar_processing/build/lidar_processing

@@ -1,0 +1,292 @@
+[0.000000] (-) TimerEvent: {}
+[0.002018] (lidar_processing) JobQueued: {'identifier': 'lidar_processing', 'dependencies': OrderedDict()}
+[0.002121] (lidar_processing) JobStarted: {'identifier': 'lidar_processing'}
+[0.027709] (lidar_processing) JobProgress: {'identifier': 'lidar_processing', 'progress': 'cmake'}
+[0.030532] (lidar_processing) JobProgress: {'identifier': 'lidar_processing', 'progress': 'build'}
+[0.031974] (lidar_processing) Command: {'cmd': ['/usr/bin/cmake', '--build', '/sim_ws/src/lidar_processing/build/lidar_processing', '--', '-j12', '-l12'], 'cwd': '/sim_ws/src/lidar_processing/build/lidar_processing', 'env': OrderedDict([('HOSTNAME', '471d16d9a9f2'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/opt/ros/foxy/opt/yaml_cpp_vendor/lib:/opt/ros/foxy/opt/rviz_ogre_vendor/lib:/opt/ros/foxy/lib/x86_64-linux-gnu:/opt/ros/foxy/lib'), ('HOME', '/root'), ('OLDPWD', '/sim_ws/src'), ('ROS_PYTHON_VERSION', '3'), ('COLCON_PREFIX_PATH', '/sim_ws/install'), ('ROS_DISTRO', 'foxy'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('TERM', 'xterm'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/opt/ros/foxy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'), ('DISPLAY', 'novnc:0.0'), ('LANG', 'C.UTF-8'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('AMENT_PREFIX_PATH', '/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/safety_node:/sim_ws/install/py_wallfollow:/sim_ws/install/pure_pursuit:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector'), ('PWD', '/sim_ws/src/lidar_processing/build/lidar_processing'), ('LC_ALL', 'C.UTF-8'), ('PYTHONPATH', '/sim_ws/install/lidar_processing/lib/python3.8/site-packages:/opt/ros/foxy/lib/python3.8/site-packages:/sim_ws/install/safety_node/lib/python3.8/site-packages:/sim_ws/install/py_wallfollow/lib/python3.8/site-packages:/sim_ws/install/gt_follow_gap/lib/python3.8/site-packages:/sim_ws/install/f1tenth_gym_ros/lib/python3.8/site-packages:/sim_ws/install/drift_detector/lib/python3.8/site-packages'), ('COLCON', '1'), ('CMAKE_PREFIX_PATH', '/sim_ws/install/safety_node:/sim_ws/install/pure_pursuit:/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector')]), 'shell': False}
+[0.078224] (lidar_processing) StdoutLine: {'line': b'-- Found ament_cmake: 0.9.12 (/opt/ros/foxy/share/ament_cmake/cmake)\n'}
+[0.098542] (-) TimerEvent: {}
+[0.127171] (lidar_processing) StdoutLine: {'line': b'-- Using PYTHON_EXECUTABLE: /usr/bin/python3\n'}
+[0.198691] (-) TimerEvent: {}
+[0.299138] (-) TimerEvent: {}
+[0.384849] (lidar_processing) StdoutLine: {'line': b'-- Found rclcpp: 2.4.3 (/opt/ros/foxy/share/rclcpp/cmake)\n'}
+[0.399324] (-) TimerEvent: {}
+[0.438366] (lidar_processing) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[0.446941] (lidar_processing) StdoutLine: {'line': b'-- Found rosidl_adapter: 1.3.1 (/opt/ros/foxy/share/rosidl_adapter/cmake)\n'}
+[0.499469] (-) TimerEvent: {}
+[0.599986] (-) TimerEvent: {}
+[0.700485] (-) TimerEvent: {}
+[0.712115] (lidar_processing) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[0.774312] (lidar_processing) StdoutLine: {'line': b'-- Found rmw_implementation_cmake: 1.0.4 (/opt/ros/foxy/share/rmw_implementation_cmake/cmake)\n'}
+[0.776707] (lidar_processing) StdoutLine: {'line': b"-- Using RMW implementation 'rmw_fastrtps_cpp' as default\n"}
+[0.801306] (-) TimerEvent: {}
+[0.901792] (-) TimerEvent: {}
+[1.002332] (-) TimerEvent: {}
+[1.005156] (lidar_processing) StdoutLine: {'line': b'-- Found laser_geometry: 2.2.0 (/opt/ros/foxy/share/laser_geometry/cmake)\n'}
+[1.011635] (lidar_processing) StdoutLine: {'line': b'-- Found sensor_msgs: 2.0.5 (/opt/ros/foxy/share/sensor_msgs/cmake)\n'}
+[1.102551] (-) TimerEvent: {}
+[1.173479] (lidar_processing) StdoutLine: {'line': b'-- Found tf2: 0.13.14 (/opt/ros/foxy/share/tf2/cmake)\n'}
+[1.186074] (lidar_processing) StdoutLine: {'line': b'-- Found tf2_ros: 0.13.14 (/opt/ros/foxy/share/tf2_ros/cmake)\n'}
+[1.202753] (-) TimerEvent: {}
+[1.303317] (-) TimerEvent: {}
+[1.404020] (-) TimerEvent: {}
+[1.504570] (-) TimerEvent: {}
+[1.605157] (-) TimerEvent: {}
+[1.669752] (lidar_processing) StdoutLine: {'line': b'-- Found pcl_ros: 2.2.1 (/opt/ros/foxy/share/pcl_ros/cmake)\n'}
+[1.705341] (-) TimerEvent: {}
+[1.805914] (-) TimerEvent: {}
+[1.906508] (-) TimerEvent: {}
+[2.007219] (-) TimerEvent: {}
+[2.107857] (-) TimerEvent: {}
+[2.134332] (lidar_processing) StdoutLine: {'line': b'-- Eigen found (include: /usr/include/eigen3, version: 3.3.7)\n'}
+[2.208192] (-) TimerEvent: {}
+[2.267983] (lidar_processing) StdoutLine: {'line': b'-- The imported target "vtkParseOGLExt" references the file\n'}
+[2.268335] (lidar_processing) StdoutLine: {'line': b'   "/usr/bin/vtkParseOGLExt-7.1"\n'}
+[2.268467] (lidar_processing) StdoutLine: {'line': b'but this file does not exist.  Possible reasons include:\n'}
+[2.268571] (lidar_processing) StdoutLine: {'line': b'* The file was deleted, renamed, or moved to another location.\n'}
+[2.268667] (lidar_processing) StdoutLine: {'line': b'* An install or uninstall procedure did not complete successfully.\n'}
+[2.268762] (lidar_processing) StdoutLine: {'line': b'* The installation package was faulty and contained\n'}
+[2.268851] (lidar_processing) StdoutLine: {'line': b'   "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"\n'}
+[2.268940] (lidar_processing) StdoutLine: {'line': b'but not all the files it references.\n'}
+[2.269024] (lidar_processing) StdoutLine: {'line': b'\n'}
+[2.271465] (lidar_processing) StdoutLine: {'line': b'-- The imported target "vtkRenderingPythonTkWidgets" references the file\n'}
+[2.271760] (lidar_processing) StdoutLine: {'line': b'   "/usr/lib/x86_64-linux-gnu/libvtkRenderingPythonTkWidgets.so"\n'}
+[2.271892] (lidar_processing) StdoutLine: {'line': b'but this file does not exist.  Possible reasons include:\n'}
+[2.272027] (lidar_processing) StdoutLine: {'line': b'* The file was deleted, renamed, or moved to another location.\n'}
+[2.272139] (lidar_processing) StdoutLine: {'line': b'* An install or uninstall procedure did not complete successfully.\n'}
+[2.272239] (lidar_processing) StdoutLine: {'line': b'* The installation package was faulty and contained\n'}
+[2.272334] (lidar_processing) StdoutLine: {'line': b'   "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"\n'}
+[2.272433] (lidar_processing) StdoutLine: {'line': b'but not all the files it references.\n'}
+[2.272531] (lidar_processing) StdoutLine: {'line': b'\n'}
+[2.273130] (lidar_processing) StdoutLine: {'line': b'-- The imported target "vtk" references the file\n'}
+[2.274978] (lidar_processing) StdoutLine: {'line': b'   "/usr/bin/vtk"\n'}
+[2.275381] (lidar_processing) StdoutLine: {'line': b'but this file does not exist.  Possible reasons include:\n'}
+[2.275587] (lidar_processing) StdoutLine: {'line': b'* The file was deleted, renamed, or moved to another location.\n'}
+[2.275721] (lidar_processing) StdoutLine: {'line': b'* An install or uninstall procedure did not complete successfully.\n'}
+[2.275823] (lidar_processing) StdoutLine: {'line': b'* The installation package was faulty and contained\n'}
+[2.275917] (lidar_processing) StdoutLine: {'line': b'   "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"\n'}
+[2.276007] (lidar_processing) StdoutLine: {'line': b'but not all the files it references.\n'}
+[2.276100] (lidar_processing) StdoutLine: {'line': b'\n'}
+[2.276188] (lidar_processing) StdoutLine: {'line': b'-- The imported target "pvtk" references the file\n'}
+[2.276277] (lidar_processing) StdoutLine: {'line': b'   "/usr/bin/pvtk"\n'}
+[2.276364] (lidar_processing) StdoutLine: {'line': b'but this file does not exist.  Possible reasons include:\n'}
+[2.276455] (lidar_processing) StdoutLine: {'line': b'* The file was deleted, renamed, or moved to another location.\n'}
+[2.276544] (lidar_processing) StdoutLine: {'line': b'* An install or uninstall procedure did not complete successfully.\n'}
+[2.276640] (lidar_processing) StdoutLine: {'line': b'* The installation package was faulty and contained\n'}
+[2.276740] (lidar_processing) StdoutLine: {'line': b'   "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"\n'}
+[2.276834] (lidar_processing) StdoutLine: {'line': b'but not all the files it references.\n'}
+[2.276929] (lidar_processing) StdoutLine: {'line': b'\n'}
+[2.307035] (lidar_processing) StdoutLine: {'line': b"-- Checking for module 'libusb-1.0'\n"}
+[2.308381] (-) TimerEvent: {}
+[2.315016] (lidar_processing) StdoutLine: {'line': b"--   No package 'libusb-1.0' found\n"}
+[2.319013] (lidar_processing) StdoutLine: {'line': b'-- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) \n'}
+[2.319345] (lidar_processing) StdoutLine: {'line': b'-- OpenNI disabled because libusb-1.0 not found.\n'}
+[2.327817] (lidar_processing) StdoutLine: {'line': b"-- Checking for module 'libusb-1.0'\n"}
+[2.334453] (lidar_processing) StdoutLine: {'line': b"--   No package 'libusb-1.0' found\n"}
+[2.339043] (lidar_processing) StdoutLine: {'line': b'-- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) \n'}
+[2.339677] (lidar_processing) StdoutLine: {'line': b'-- OpenNI 2 disabled because libusb-1.0 not found.\n'}
+[2.362940] (lidar_processing) StdoutLine: {'line': b'-- LIBUSB_1_LIBRARY (missing: LIBUSB_1_INCLUDE_DIR) \n'}
+[2.370471] (lidar_processing) StdoutLine: {'line': b"-- Checking for module 'libusb-1.0'\n"}
+[2.376216] (lidar_processing) StdoutLine: {'line': b"--   No package 'libusb-1.0' found\n"}
+[2.380154] (lidar_processing) StdoutLine: {'line': b'-- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) \n'}
+[2.380494] (lidar_processing) StdoutLine: {'line': b'-- OpenNI disabled because libusb-1.0 not found.\n'}
+[2.388107] (lidar_processing) StdoutLine: {'line': b"-- Checking for module 'libusb-1.0'\n"}
+[2.393519] (lidar_processing) StdoutLine: {'line': b"--   No package 'libusb-1.0' found\n"}
+[2.397246] (lidar_processing) StdoutLine: {'line': b'-- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) \n'}
+[2.397492] (lidar_processing) StdoutLine: {'line': b'-- OpenNI 2 disabled because libusb-1.0 not found.\n'}
+[2.408572] (-) TimerEvent: {}
+[2.417322] (lidar_processing) StdoutLine: {'line': b'-- QHULL found (include: /usr/include, lib: optimized;/usr/lib/x86_64-linux-gnu/libqhull.so;debug;/usr/lib/x86_64-linux-gnu/libqhull.so)\n'}
+[2.424558] (lidar_processing) StdoutLine: {'line': b"-- Checking for module 'libusb-1.0'\n"}
+[2.430564] (lidar_processing) StdoutLine: {'line': b"--   No package 'libusb-1.0' found\n"}
+[2.434289] (lidar_processing) StdoutLine: {'line': b'-- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) \n'}
+[2.434548] (lidar_processing) StdoutLine: {'line': b'-- OpenNI disabled because libusb-1.0 not found.\n'}
+[2.508764] (-) TimerEvent: {}
+[2.609453] (-) TimerEvent: {}
+[2.710025] (-) TimerEvent: {}
+[2.810654] (-) TimerEvent: {}
+[2.876218] (lidar_processing) StdoutLine: {'line': b'-- Found ament_lint_auto: 0.9.8 (/opt/ros/foxy/share/ament_lint_auto/cmake)\n'}
+[2.910833] (-) TimerEvent: {}
+[3.011428] (-) TimerEvent: {}
+[3.013570] (lidar_processing) StdoutLine: {'line': b"-- Added test 'copyright' to check source files copyright and LICENSE\n"}
+[3.023578] (lidar_processing) StdoutLine: {'line': b"-- Added test 'cppcheck' to perform static code analysis on C / C++ code\n"}
+[3.024595] (lidar_processing) StdoutLine: {'line': b'-- Configured cppcheck include dirs: \n'}
+[3.025004] (lidar_processing) StdoutLine: {'line': b'-- Configured cppcheck exclude dirs and/or files: \n'}
+[3.037775] (lidar_processing) StdoutLine: {'line': b"-- Added test 'cpplint' to check C / C++ code against the Google style\n"}
+[3.038091] (lidar_processing) StdoutLine: {'line': b'-- Configured cpplint exclude dirs and/or files: \n'}
+[3.040003] (lidar_processing) StdoutLine: {'line': b"-- Added test 'flake8' to check Python code syntax and style conventions\n"}
+[3.046586] (lidar_processing) StdoutLine: {'line': b"-- Added test 'lint_cmake' to check CMake code style\n"}
+[3.049212] (lidar_processing) StdoutLine: {'line': b"-- Added test 'pep257' to check Python code against some of the style conventions in PEP 257\n"}
+[3.061848] (lidar_processing) StdoutLine: {'line': b"-- Added test 'uncrustify' to check C / C++ code style\n"}
+[3.062241] (lidar_processing) StdoutLine: {'line': b'-- Configured uncrustify additional arguments: \n'}
+[3.063579] (lidar_processing) StdoutLine: {'line': b"-- Added test 'xmllint' to check XML markup files\n"}
+[3.069073] (lidar_processing) StdoutLine: {'line': b'-- Configuring done\n'}
+[3.111635] (-) TimerEvent: {}
+[3.147357] (lidar_processing) StdoutLine: {'line': b'-- Generating done\n'}
+[3.152046] (lidar_processing) StdoutLine: {'line': b'-- Build files have been written to: /sim_ws/src/lidar_processing/build/lidar_processing\n'}
+[3.211828] (-) TimerEvent: {}
+[3.217920] (lidar_processing) StdoutLine: {'line': b'[ 25%] \x1b[32mBuilding CXX object CMakeFiles/clustering.dir/src/clustering.cpp.o\x1b[0m\n'}
+[3.236983] (lidar_processing) StdoutLine: {'line': b'[ 75%] Built target scan_to_cloud_node\n'}
+[3.312020] (-) TimerEvent: {}
+[3.412692] (-) TimerEvent: {}
+[3.513318] (-) TimerEvent: {}
+[3.614031] (-) TimerEvent: {}
+[3.714851] (-) TimerEvent: {}
+[3.815611] (-) TimerEvent: {}
+[3.916128] (-) TimerEvent: {}
+[4.016696] (-) TimerEvent: {}
+[4.117329] (-) TimerEvent: {}
+[4.218034] (-) TimerEvent: {}
+[4.318698] (-) TimerEvent: {}
+[4.419412] (-) TimerEvent: {}
+[4.520027] (-) TimerEvent: {}
+[4.620680] (-) TimerEvent: {}
+[4.721241] (-) TimerEvent: {}
+[4.821813] (-) TimerEvent: {}
+[4.922378] (-) TimerEvent: {}
+[5.022961] (-) TimerEvent: {}
+[5.123650] (-) TimerEvent: {}
+[5.224237] (-) TimerEvent: {}
+[5.324808] (-) TimerEvent: {}
+[5.425441] (-) TimerEvent: {}
+[5.526357] (-) TimerEvent: {}
+[5.626943] (-) TimerEvent: {}
+[5.727543] (-) TimerEvent: {}
+[5.828131] (-) TimerEvent: {}
+[5.928915] (-) TimerEvent: {}
+[6.029561] (-) TimerEvent: {}
+[6.130208] (-) TimerEvent: {}
+[6.230861] (-) TimerEvent: {}
+[6.331481] (-) TimerEvent: {}
+[6.432165] (-) TimerEvent: {}
+[6.532768] (-) TimerEvent: {}
+[6.633325] (-) TimerEvent: {}
+[6.733876] (-) TimerEvent: {}
+[6.834387] (-) TimerEvent: {}
+[6.934978] (-) TimerEvent: {}
+[7.035523] (-) TimerEvent: {}
+[7.136094] (-) TimerEvent: {}
+[7.236569] (-) TimerEvent: {}
+[7.337231] (-) TimerEvent: {}
+[7.437804] (-) TimerEvent: {}
+[7.538634] (-) TimerEvent: {}
+[7.639250] (-) TimerEvent: {}
+[7.739888] (-) TimerEvent: {}
+[7.840569] (-) TimerEvent: {}
+[7.941217] (-) TimerEvent: {}
+[8.041847] (-) TimerEvent: {}
+[8.142423] (-) TimerEvent: {}
+[8.243142] (-) TimerEvent: {}
+[8.343767] (-) TimerEvent: {}
+[8.444513] (-) TimerEvent: {}
+[8.545174] (-) TimerEvent: {}
+[8.645909] (-) TimerEvent: {}
+[8.746510] (-) TimerEvent: {}
+[8.847200] (-) TimerEvent: {}
+[8.947922] (-) TimerEvent: {}
+[9.048555] (-) TimerEvent: {}
+[9.149237] (-) TimerEvent: {}
+[9.249888] (-) TimerEvent: {}
+[9.350457] (-) TimerEvent: {}
+[9.451086] (-) TimerEvent: {}
+[9.552052] (-) TimerEvent: {}
+[9.652992] (-) TimerEvent: {}
+[9.753725] (-) TimerEvent: {}
+[9.854451] (-) TimerEvent: {}
+[9.955154] (-) TimerEvent: {}
+[10.055889] (-) TimerEvent: {}
+[10.156887] (-) TimerEvent: {}
+[10.257587] (-) TimerEvent: {}
+[10.358238] (-) TimerEvent: {}
+[10.459749] (-) TimerEvent: {}
+[10.560614] (-) TimerEvent: {}
+[10.661123] (-) TimerEvent: {}
+[10.761678] (-) TimerEvent: {}
+[10.862419] (-) TimerEvent: {}
+[10.963203] (-) TimerEvent: {}
+[11.063918] (-) TimerEvent: {}
+[11.164687] (-) TimerEvent: {}
+[11.265406] (-) TimerEvent: {}
+[11.366134] (-) TimerEvent: {}
+[11.466686] (-) TimerEvent: {}
+[11.567251] (-) TimerEvent: {}
+[11.667830] (-) TimerEvent: {}
+[11.768397] (-) TimerEvent: {}
+[11.869065] (-) TimerEvent: {}
+[11.969592] (-) TimerEvent: {}
+[12.070224] (-) TimerEvent: {}
+[12.170835] (-) TimerEvent: {}
+[12.271325] (-) TimerEvent: {}
+[12.371949] (-) TimerEvent: {}
+[12.472629] (-) TimerEvent: {}
+[12.573218] (-) TimerEvent: {}
+[12.673822] (-) TimerEvent: {}
+[12.774364] (-) TimerEvent: {}
+[12.875018] (-) TimerEvent: {}
+[12.975793] (-) TimerEvent: {}
+[13.076452] (-) TimerEvent: {}
+[13.177377] (-) TimerEvent: {}
+[13.278268] (-) TimerEvent: {}
+[13.379575] (-) TimerEvent: {}
+[13.480167] (-) TimerEvent: {}
+[13.583840] (-) TimerEvent: {}
+[13.684468] (-) TimerEvent: {}
+[13.785429] (-) TimerEvent: {}
+[13.886166] (-) TimerEvent: {}
+[13.986792] (-) TimerEvent: {}
+[14.087557] (-) TimerEvent: {}
+[14.188257] (-) TimerEvent: {}
+[14.288854] (-) TimerEvent: {}
+[14.389617] (-) TimerEvent: {}
+[14.491095] (-) TimerEvent: {}
+[14.591782] (-) TimerEvent: {}
+[14.692463] (-) TimerEvent: {}
+[14.793081] (-) TimerEvent: {}
+[14.803671] (lidar_processing) StdoutLine: {'line': b'[100%] \x1b[32m\x1b[1mLinking CXX executable clustering\x1b[0m\n'}
+[14.893310] (-) TimerEvent: {}
+[14.993954] (-) TimerEvent: {}
+[15.094552] (-) TimerEvent: {}
+[15.195124] (-) TimerEvent: {}
+[15.295763] (-) TimerEvent: {}
+[15.396431] (-) TimerEvent: {}
+[15.497064] (-) TimerEvent: {}
+[15.597739] (-) TimerEvent: {}
+[15.698262] (-) TimerEvent: {}
+[15.798897] (-) TimerEvent: {}
+[15.899454] (-) TimerEvent: {}
+[16.000109] (-) TimerEvent: {}
+[16.100601] (-) TimerEvent: {}
+[16.201106] (-) TimerEvent: {}
+[16.301685] (-) TimerEvent: {}
+[16.402361] (-) TimerEvent: {}
+[16.503038] (-) TimerEvent: {}
+[16.603736] (-) TimerEvent: {}
+[16.704479] (-) TimerEvent: {}
+[16.805207] (-) TimerEvent: {}
+[16.812713] (lidar_processing) StdoutLine: {'line': b'[100%] Built target clustering\n'}
+[16.840521] (lidar_processing) CommandEnded: {'returncode': 0}
+[16.888882] (lidar_processing) JobProgress: {'identifier': 'lidar_processing', 'progress': 'install'}
+[16.906566] (-) TimerEvent: {}
+[16.911108] (lidar_processing) Command: {'cmd': ['/usr/bin/cmake', '--install', '/sim_ws/src/lidar_processing/build/lidar_processing'], 'cwd': '/sim_ws/src/lidar_processing/build/lidar_processing', 'env': OrderedDict([('HOSTNAME', '471d16d9a9f2'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/opt/ros/foxy/opt/yaml_cpp_vendor/lib:/opt/ros/foxy/opt/rviz_ogre_vendor/lib:/opt/ros/foxy/lib/x86_64-linux-gnu:/opt/ros/foxy/lib'), ('HOME', '/root'), ('OLDPWD', '/sim_ws/src'), ('ROS_PYTHON_VERSION', '3'), ('COLCON_PREFIX_PATH', '/sim_ws/install'), ('ROS_DISTRO', 'foxy'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('TERM', 'xterm'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/opt/ros/foxy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'), ('DISPLAY', 'novnc:0.0'), ('LANG', 'C.UTF-8'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('AMENT_PREFIX_PATH', '/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/safety_node:/sim_ws/install/py_wallfollow:/sim_ws/install/pure_pursuit:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector'), ('PWD', '/sim_ws/src/lidar_processing/build/lidar_processing'), ('LC_ALL', 'C.UTF-8'), ('PYTHONPATH', '/sim_ws/install/lidar_processing/lib/python3.8/site-packages:/opt/ros/foxy/lib/python3.8/site-packages:/sim_ws/install/safety_node/lib/python3.8/site-packages:/sim_ws/install/py_wallfollow/lib/python3.8/site-packages:/sim_ws/install/gt_follow_gap/lib/python3.8/site-packages:/sim_ws/install/f1tenth_gym_ros/lib/python3.8/site-packages:/sim_ws/install/drift_detector/lib/python3.8/site-packages'), ('COLCON', '1'), ('CMAKE_PREFIX_PATH', '/sim_ws/install/safety_node:/sim_ws/install/pure_pursuit:/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector')]), 'shell': False}
+[16.924419] (lidar_processing) StdoutLine: {'line': b'-- Install configuration: ""\n'}
+[16.925191] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/scan_to_cloud_node\n'}
+[16.932668] (lidar_processing) StdoutLine: {'line': b'-- Set runtime path of "/sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/scan_to_cloud_node" to ""\n'}
+[16.932920] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/clustering\n'}
+[16.934264] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/ament_index/resource_index/package_run_dependencies/lidar_processing\n'}
+[16.934733] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/ament_index/resource_index/parent_prefix_path/lidar_processing\n'}
+[16.935099] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/ament_prefix_path.sh\n'}
+[16.935517] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/ament_prefix_path.dsv\n'}
+[16.935836] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/path.sh\n'}
+[16.936202] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/path.dsv\n'}
+[16.936599] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.bash\n'}
+[16.936912] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.sh\n'}
+[16.937868] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.zsh\n'}
+[16.938344] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.dsv\n'}
+[16.938717] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/package.dsv\n'}
+[16.938891] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/ament_index/resource_index/packages/lidar_processing\n'}
+[16.939052] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/cmake/lidar_processingConfig.cmake\n'}
+[16.939337] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/cmake/lidar_processingConfig-version.cmake\n'}
+[16.939431] (lidar_processing) StdoutLine: {'line': b'-- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/package.xml\n'}
+[16.942055] (lidar_processing) CommandEnded: {'returncode': 0}
+[17.006954] (-) TimerEvent: {}
+[17.038471] (lidar_processing) JobEnded: {'identifier': 'lidar_processing', 'rc': 0}
+[17.041441] (-) EventReactorShutdown: {}

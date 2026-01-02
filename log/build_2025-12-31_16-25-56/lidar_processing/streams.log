@@ -1,0 +1,212 @@
+[0.190s] Invoking command in '/sim_ws/src/lidar_processing/build/lidar_processing': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector:/sim_ws/src/f1tenth_gym_ros/install/f1tenth_gym_ros:/opt/ros/foxy /usr/bin/cmake /sim_ws/src/lidar_processing -DCMAKE_INSTALL_PREFIX=/sim_ws/src/lidar_processing/install/lidar_processing
+[0.407s] -- The C compiler identification is GNU 9.4.0
+[0.719s] -- The CXX compiler identification is GNU 9.4.0
+[0.788s] -- Check for working C compiler: /usr/bin/cc
+[0.962s] -- Check for working C compiler: /usr/bin/cc -- works
+[0.965s] -- Detecting C compiler ABI info
+[1.141s] -- Detecting C compiler ABI info - done
+[1.165s] -- Detecting C compile features
+[1.165s] -- Detecting C compile features - done
+[1.174s] -- Check for working CXX compiler: /usr/bin/c++
+[1.413s] -- Check for working CXX compiler: /usr/bin/c++ -- works
+[1.415s] -- Detecting CXX compiler ABI info
+[1.651s] -- Detecting CXX compiler ABI info - done
+[1.683s] -- Detecting CXX compile features
+[1.686s] -- Detecting CXX compile features - done
+[1.799s] -- Found ament_cmake: 0.9.12 (/opt/ros/foxy/share/ament_cmake/cmake)
+[2.564s] -- Found PythonInterp: /usr/bin/python3 (found suitable version "3.8.10", minimum required is "3") 
+[2.564s] -- Using PYTHON_EXECUTABLE: /usr/bin/python3
+[5.643s] -- Found rclcpp: 2.4.3 (/opt/ros/foxy/share/rclcpp/cmake)
+[7.034s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[7.385s] -- Found rosidl_adapter: 1.3.1 (/opt/ros/foxy/share/rosidl_adapter/cmake)
+[8.733s] -- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "1.1.1f")  
+[9.066s] -- Found FastRTPS: /opt/ros/foxy/include  
+[10.133s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[11.087s] -- Found rmw_implementation_cmake: 1.0.4 (/opt/ros/foxy/share/rmw_implementation_cmake/cmake)
+[11.100s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[11.105s] -- Looking for pthread.h
+[11.296s] -- Looking for pthread.h - found
+[11.298s] -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+[11.521s] -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Failed
+[11.522s] -- Looking for pthread_create in pthreads
+[11.696s] -- Looking for pthread_create in pthreads - not found
+[11.697s] -- Looking for pthread_create in pthread
+[11.914s] -- Looking for pthread_create in pthread - found
+[11.914s] -- Found Threads: TRUE  
+[13.794s] -- Found rclpy: 1.0.13 (/opt/ros/foxy/share/rclpy/cmake)
+[13.933s] -- Found laser_geometry: 2.2.0 (/opt/ros/foxy/share/laser_geometry/cmake)
+[14.403s] -- Found sensor_msgs: 2.0.5 (/opt/ros/foxy/share/sensor_msgs/cmake)
+[14.996s] -- Found tf2: 0.13.14 (/opt/ros/foxy/share/tf2/cmake)
+[15.356s] -- Found tf2_ros: 0.13.14 (/opt/ros/foxy/share/tf2_ros/cmake)
+[17.727s] -- Found tf2_sensor_msgs: 0.13.14 (/opt/ros/foxy/share/tf2_sensor_msgs/cmake)
+[17.896s] -- Found tf2_geometry_msgs: 0.13.14 (/opt/ros/foxy/share/tf2_geometry_msgs/cmake)
+[18.063s] -- Found Eigen3: TRUE (found version "3.3.7") 
+[18.276s] -- Found pcl_ros: 2.2.1 (/opt/ros/foxy/share/pcl_ros/cmake)
+[19.377s] -- Checking for module 'eigen3'
+[19.516s] --   Found eigen3, version 3.3.7
+[19.664s] -- Found Eigen: /usr/include/eigen3 (Required is at least version "3.1") 
+[19.666s] -- Eigen found (include: /usr/include/eigen3, version: 3.3.7)
+[23.157s] -- Checking for module 'flann'
+[23.271s] --   Found flann, version 1.9.1
+[23.456s] -- Found FLANN: /usr/lib/x86_64-linux-gnu/libflann_cpp.so  
+[23.643s] -- The imported target "vtkParseOGLExt" references the file
+[23.644s]    "/usr/bin/vtkParseOGLExt-7.1"
+[23.649s] but this file does not exist.  Possible reasons include:
+[23.650s] * The file was deleted, renamed, or moved to another location.
+[23.650s] * An install or uninstall procedure did not complete successfully.
+[23.650s] * The installation package was faulty and contained
+[23.650s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[23.650s] but not all the files it references.
+[23.650s] 
+[23.652s] -- The imported target "vtkRenderingPythonTkWidgets" references the file
+[23.653s]    "/usr/lib/x86_64-linux-gnu/libvtkRenderingPythonTkWidgets.so"
+[23.653s] but this file does not exist.  Possible reasons include:
+[23.653s] * The file was deleted, renamed, or moved to another location.
+[23.654s] * An install or uninstall procedure did not complete successfully.
+[23.654s] * The installation package was faulty and contained
+[23.655s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[23.655s] but not all the files it references.
+[23.655s] 
+[23.659s] -- The imported target "vtk" references the file
+[23.659s]    "/usr/bin/vtk"
+[23.659s] but this file does not exist.  Possible reasons include:
+[23.660s] * The file was deleted, renamed, or moved to another location.
+[23.660s] * An install or uninstall procedure did not complete successfully.
+[23.660s] * The installation package was faulty and contained
+[23.660s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[23.660s] but not all the files it references.
+[23.661s] 
+[23.661s] -- The imported target "pvtk" references the file
+[23.661s]    "/usr/bin/pvtk"
+[23.661s] but this file does not exist.  Possible reasons include:
+[23.661s] * The file was deleted, renamed, or moved to another location.
+[23.662s] * An install or uninstall procedure did not complete successfully.
+[23.662s] * The installation package was faulty and contained
+[23.662s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[23.662s] but not all the files it references.
+[23.662s] 
+[23.720s] -- Checking for module 'libusb-1.0'
+[23.739s] --   No package 'libusb-1.0' found
+[23.761s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[23.762s] -- OpenNI disabled because libusb-1.0 not found.
+[23.779s] -- Checking for module 'libusb-1.0'
+[23.800s] --   No package 'libusb-1.0' found
+[23.826s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[23.826s] -- OpenNI 2 disabled because libusb-1.0 not found.
+[23.890s] -- LIBUSB_1_LIBRARY (missing: LIBUSB_1_INCLUDE_DIR) 
+[23.911s] -- Checking for module 'libusb-1.0'
+[23.927s] --   No package 'libusb-1.0' found
+[23.954s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[23.954s] -- OpenNI disabled because libusb-1.0 not found.
+[23.979s] -- Checking for module 'libusb-1.0'
+[24.002s] --   No package 'libusb-1.0' found
+[24.062s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[24.062s] -- OpenNI 2 disabled because libusb-1.0 not found.
+[25.322s] -- Found Qhull: optimized;/usr/lib/x86_64-linux-gnu/libqhull.so;debug;/usr/lib/x86_64-linux-gnu/libqhull.so  
+[25.322s] -- QHULL found (include: /usr/include, lib: optimized;/usr/lib/x86_64-linux-gnu/libqhull.so;debug;/usr/lib/x86_64-linux-gnu/libqhull.so)
+[25.348s] -- Checking for module 'libusb-1.0'
+[25.389s] --   No package 'libusb-1.0' found
+[25.510s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[25.510s] -- OpenNI disabled because libusb-1.0 not found.
+[25.566s] -- Found PCL_COMMON: /usr/lib/x86_64-linux-gnu/libpcl_common.so  
+[25.588s] -- Found PCL_KDTREE: /usr/lib/x86_64-linux-gnu/libpcl_kdtree.so  
+[25.590s] -- Found PCL_OCTREE: /usr/lib/x86_64-linux-gnu/libpcl_octree.so  
+[25.596s] -- Found PCL_SEARCH: /usr/lib/x86_64-linux-gnu/libpcl_search.so  
+[25.599s] -- Found PCL_SAMPLE_CONSENSUS: /usr/lib/x86_64-linux-gnu/libpcl_sample_consensus.so  
+[25.603s] -- Found PCL_FILTERS: /usr/lib/x86_64-linux-gnu/libpcl_filters.so  
+[25.605s] -- Found PCL_2D: /usr/include/pcl-1.10  
+[25.606s] -- Found PCL_GEOMETRY: /usr/include/pcl-1.10  
+[25.608s] -- Found PCL_IO: /usr/lib/x86_64-linux-gnu/libpcl_io.so  
+[25.617s] -- Found PCL_FEATURES: /usr/lib/x86_64-linux-gnu/libpcl_features.so  
+[25.624s] -- Found PCL_ML: /usr/lib/x86_64-linux-gnu/libpcl_ml.so  
+[25.628s] -- Found PCL_SEGMENTATION: /usr/lib/x86_64-linux-gnu/libpcl_segmentation.so  
+[25.636s] -- Found PCL_VISUALIZATION: /usr/lib/x86_64-linux-gnu/libpcl_visualization.so  
+[25.646s] -- Found PCL_SURFACE: /usr/lib/x86_64-linux-gnu/libpcl_surface.so  
+[25.654s] -- Found PCL_REGISTRATION: /usr/lib/x86_64-linux-gnu/libpcl_registration.so  
+[25.662s] -- Found PCL_KEYPOINTS: /usr/lib/x86_64-linux-gnu/libpcl_keypoints.so  
+[25.670s] -- Found PCL_TRACKING: /usr/lib/x86_64-linux-gnu/libpcl_tracking.so  
+[25.677s] -- Found PCL_RECOGNITION: /usr/lib/x86_64-linux-gnu/libpcl_recognition.so  
+[25.681s] -- Found PCL_STEREO: /usr/lib/x86_64-linux-gnu/libpcl_stereo.so  
+[25.682s] -- Found PCL_APPS: /usr/lib/x86_64-linux-gnu/libpcl_apps.so  
+[25.689s] -- Found PCL_IN_HAND_SCANNER: /usr/include/pcl-1.10  
+[25.691s] -- Found PCL_POINT_CLOUD_EDITOR: /usr/include/pcl-1.10  
+[25.693s] -- Found PCL_OUTOFCORE: /usr/lib/x86_64-linux-gnu/libpcl_outofcore.so  
+[25.697s] -- Found PCL_PEOPLE: /usr/lib/x86_64-linux-gnu/libpcl_people.so  
+[26.174s] CMake Warning (dev) at CMakeLists.txt:36 (find_package):
+[26.175s]   Policy CMP0074 is not set: find_package uses <PackageName>_ROOT variables.
+[26.175s]   Run "cmake --help-policy CMP0074" for policy details.  Use the cmake_policy
+[26.175s]   command to set the policy and suppress this warning.
+[26.176s] 
+[26.176s]   CMake variable PCL_ROOT is set to:
+[26.176s] 
+[26.176s]     /usr
+[26.176s] 
+[26.177s]   For compatibility, CMake is ignoring the variable.
+[26.177s] This warning is for project developers.  Use -Wno-dev to suppress it.
+[26.177s] 
+[26.377s] -- Found ackermann_msgs: 2.0.2 (/opt/ros/foxy/share/ackermann_msgs/cmake)
+[26.666s] -- Found nav_msgs: 2.0.5 (/opt/ros/foxy/share/nav_msgs/cmake)
+[27.740s] -- Found ament_lint_auto: 0.9.8 (/opt/ros/foxy/share/ament_lint_auto/cmake)
+[30.152s] -- Added test 'copyright' to check source files copyright and LICENSE
+[30.181s] -- Added test 'cppcheck' to perform static code analysis on C / C++ code
+[30.183s] -- Configured cppcheck include dirs: /sim_ws/src/lidar_processing/include
+[30.183s] -- Configured cppcheck exclude dirs and/or files: 
+[30.208s] -- Added test 'cpplint' to check C / C++ code against the Google style
+[30.208s] -- Configured cpplint exclude dirs and/or files: 
+[30.224s] -- Added test 'flake8' to check Python code syntax and style conventions
+[30.238s] -- Added test 'lint_cmake' to check CMake code style
+[30.256s] -- Added test 'pep257' to check Python code against some of the style conventions in PEP 257
+[30.296s] -- Added test 'uncrustify' to check C / C++ code style
+[30.296s] -- Configured uncrustify additional arguments: 
+[30.310s] -- Added test 'xmllint' to check XML markup files
+[30.360s] -- Configuring done
+[30.585s] -- Generating done
+[30.597s] -- Build files have been written to: /sim_ws/src/lidar_processing/build/lidar_processing
+[30.635s] Invoked command in '/sim_ws/src/lidar_processing/build/lidar_processing' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector:/sim_ws/src/f1tenth_gym_ros/install/f1tenth_gym_ros:/opt/ros/foxy /usr/bin/cmake /sim_ws/src/lidar_processing -DCMAKE_INSTALL_PREFIX=/sim_ws/src/lidar_processing/install/lidar_processing
+[30.646s] Invoking command in '/sim_ws/src/lidar_processing/build/lidar_processing': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector:/sim_ws/src/f1tenth_gym_ros/install/f1tenth_gym_ros:/opt/ros/foxy /usr/bin/cmake --build /sim_ws/src/lidar_processing/build/lidar_processing -- -j12 -l12
+[30.763s] [35m[1mScanning dependencies of target clustering[0m
+[30.772s] [35m[1mScanning dependencies of target bounding_box[0m
+[30.800s] [35m[1mScanning dependencies of target scan_to_cloud[0m
+[31.034s] [ 16%] [32mBuilding CXX object CMakeFiles/clustering.dir/src/clustering.cpp.o[0m
+[31.054s] [ 33%] [32mBuilding CXX object CMakeFiles/scan_to_cloud.dir/src/scan_to_cloud.cpp.o[0m
+[31.132s] [ 50%] [32mBuilding CXX object CMakeFiles/bounding_box.dir/src/bounding_box.cpp.o[0m
+[53.734s] [ 66%] [32m[1mLinking CXX executable scan_to_cloud[0m
+[54.760s] [ 66%] Built target scan_to_cloud
+[58.829s] [ 83%] [32m[1mLinking CXX executable bounding_box[0m
+[59.553s] [ 83%] Built target bounding_box
+[77.508s] [100%] [32m[1mLinking CXX executable clustering[0m
+[80.325s] [100%] Built target clustering
+[80.358s] Invoked command in '/sim_ws/src/lidar_processing/build/lidar_processing' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector:/sim_ws/src/f1tenth_gym_ros/install/f1tenth_gym_ros:/opt/ros/foxy /usr/bin/cmake --build /sim_ws/src/lidar_processing/build/lidar_processing -- -j12 -l12
+[80.522s] Invoking command in '/sim_ws/src/lidar_processing/build/lidar_processing': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector:/sim_ws/src/f1tenth_gym_ros/install/f1tenth_gym_ros:/opt/ros/foxy /usr/bin/cmake --install /sim_ws/src/lidar_processing/build/lidar_processing
+[80.547s] -- Install configuration: ""
+[80.551s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/pythonpath.sh
+[80.552s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/pythonpath.dsv
+[80.553s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/lib/python3.8/site-packages/lidar_processing
+[80.556s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/lib/python3.8/site-packages/lidar_processing/__init__.py
+[81.161s] Listing '/sim_ws/src/lidar_processing/install/lidar_processing/lib/python3.8/site-packages/lidar_processing'...
+[81.161s] Compiling '/sim_ws/src/lidar_processing/install/lidar_processing/lib/python3.8/site-packages/lidar_processing/__init__.py'...
+[81.173s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/scan_to_cloud
+[81.180s] -- Set runtime path of "/sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/scan_to_cloud" to ""
+[81.182s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/bounding_box
+[81.191s] -- Set runtime path of "/sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/bounding_box" to ""
+[81.191s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/clustering
+[81.195s] -- Set runtime path of "/sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/clustering" to ""
+[81.196s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/lib/lidar_processing/imm_filterpy.py
+[81.196s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/launch
+[81.197s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/launch/launch_lidar_processing.py
+[81.202s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/ament_index/resource_index/package_run_dependencies/lidar_processing
+[81.202s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/ament_index/resource_index/parent_prefix_path/lidar_processing
+[81.203s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/ament_prefix_path.sh
+[81.204s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/ament_prefix_path.dsv
+[81.204s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/path.sh
+[81.205s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/environment/path.dsv
+[81.205s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.bash
+[81.205s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.sh
+[81.206s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.zsh
+[81.210s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/local_setup.dsv
+[81.210s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/package.dsv
+[81.211s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/ament_index/resource_index/packages/lidar_processing
+[81.211s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/cmake/lidar_processingConfig.cmake
+[81.214s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/cmake/lidar_processingConfig-version.cmake
+[81.217s] -- Installing: /sim_ws/src/lidar_processing/install/lidar_processing/share/lidar_processing/package.xml
+[81.226s] Invoked command in '/sim_ws/src/lidar_processing/build/lidar_processing' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector:/sim_ws/src/f1tenth_gym_ros/install/f1tenth_gym_ros:/opt/ros/foxy /usr/bin/cmake --install /sim_ws/src/lidar_processing/build/lidar_processing

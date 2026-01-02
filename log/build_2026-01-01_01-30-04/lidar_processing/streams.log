@@ -1,0 +1,112 @@
+[0.058s] Invoking command in '/sim_ws/src/lidar_processing/build/lidar_processing': CMAKE_PREFIX_PATH=/opt/ros/foxy /usr/bin/cmake --build /sim_ws/src/lidar_processing/build/lidar_processing -- -j12 -l12
+[0.169s] -- Found ament_cmake: 0.9.12 (/opt/ros/foxy/share/ament_cmake/cmake)
+[0.232s] -- Using PYTHON_EXECUTABLE: /usr/bin/python3
+[0.630s] -- Found rclcpp: 2.4.3 (/opt/ros/foxy/share/rclcpp/cmake)
+[0.756s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.767s] -- Found rosidl_adapter: 1.3.1 (/opt/ros/foxy/share/rosidl_adapter/cmake)
+[1.090s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[1.188s] -- Found rmw_implementation_cmake: 1.0.4 (/opt/ros/foxy/share/rmw_implementation_cmake/cmake)
+[1.190s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[1.468s] -- Found rclpy: 1.0.13 (/opt/ros/foxy/share/rclpy/cmake)
+[1.469s] -- Found laser_geometry: 2.2.0 (/opt/ros/foxy/share/laser_geometry/cmake)
+[1.481s] -- Found sensor_msgs: 2.0.5 (/opt/ros/foxy/share/sensor_msgs/cmake)
+[1.705s] -- Found tf2: 0.13.14 (/opt/ros/foxy/share/tf2/cmake)
+[1.724s] -- Found tf2_ros: 0.13.14 (/opt/ros/foxy/share/tf2_ros/cmake)
+[2.354s] -- Found tf2_sensor_msgs: 0.13.14 (/opt/ros/foxy/share/tf2_sensor_msgs/cmake)
+[2.384s] -- Found tf2_geometry_msgs: 0.13.14 (/opt/ros/foxy/share/tf2_geometry_msgs/cmake)
+[2.444s] -- Found pcl_ros: 2.2.1 (/opt/ros/foxy/share/pcl_ros/cmake)
+[2.992s] -- Eigen found (include: /usr/include/eigen3, version: 3.3.7)
+[3.194s] -- The imported target "vtkParseOGLExt" references the file
+[3.194s]    "/usr/bin/vtkParseOGLExt-7.1"
+[3.194s] but this file does not exist.  Possible reasons include:
+[3.194s] * The file was deleted, renamed, or moved to another location.
+[3.194s] * An install or uninstall procedure did not complete successfully.
+[3.194s] * The installation package was faulty and contained
+[3.195s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[3.195s] but not all the files it references.
+[3.195s] 
+[3.196s] -- The imported target "vtkRenderingPythonTkWidgets" references the file
+[3.197s]    "/usr/lib/x86_64-linux-gnu/libvtkRenderingPythonTkWidgets.so"
+[3.197s] but this file does not exist.  Possible reasons include:
+[3.197s] * The file was deleted, renamed, or moved to another location.
+[3.197s] * An install or uninstall procedure did not complete successfully.
+[3.197s] * The installation package was faulty and contained
+[3.197s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[3.198s] but not all the files it references.
+[3.198s] 
+[3.199s] -- The imported target "vtk" references the file
+[3.199s]    "/usr/bin/vtk"
+[3.199s] but this file does not exist.  Possible reasons include:
+[3.199s] * The file was deleted, renamed, or moved to another location.
+[3.199s] * An install or uninstall procedure did not complete successfully.
+[3.200s] * The installation package was faulty and contained
+[3.200s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[3.200s] but not all the files it references.
+[3.200s] 
+[3.200s] -- The imported target "pvtk" references the file
+[3.201s]    "/usr/bin/pvtk"
+[3.201s] but this file does not exist.  Possible reasons include:
+[3.201s] * The file was deleted, renamed, or moved to another location.
+[3.201s] * An install or uninstall procedure did not complete successfully.
+[3.201s] * The installation package was faulty and contained
+[3.201s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[3.202s] but not all the files it references.
+[3.202s] 
+[3.250s] -- Checking for module 'libusb-1.0'
+[3.269s] --   No package 'libusb-1.0' found
+[3.278s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[3.279s] -- OpenNI disabled because libusb-1.0 not found.
+[3.285s] -- Checking for module 'libusb-1.0'
+[3.292s] --   No package 'libusb-1.0' found
+[3.296s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[3.296s] -- OpenNI 2 disabled because libusb-1.0 not found.
+[3.323s] -- LIBUSB_1_LIBRARY (missing: LIBUSB_1_INCLUDE_DIR) 
+[3.335s] -- Checking for module 'libusb-1.0'
+[3.350s] --   No package 'libusb-1.0' found
+[3.366s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[3.366s] -- OpenNI disabled because libusb-1.0 not found.
+[3.386s] -- Checking for module 'libusb-1.0'
+[3.392s] --   No package 'libusb-1.0' found
+[3.396s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[3.396s] -- OpenNI 2 disabled because libusb-1.0 not found.
+[3.421s] -- QHULL found (include: /usr/include, lib: optimized;/usr/lib/x86_64-linux-gnu/libqhull.so;debug;/usr/lib/x86_64-linux-gnu/libqhull.so)
+[3.435s] -- Checking for module 'libusb-1.0'
+[3.451s] --   No package 'libusb-1.0' found
+[3.455s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[3.456s] -- OpenNI disabled because libusb-1.0 not found.
+[3.931s] CMake Warning (dev) at CMakeLists.txt:36 (find_package):
+[3.932s]   Policy CMP0074 is not set: find_package uses <PackageName>_ROOT variables.
+[3.932s]   Run "cmake --help-policy CMP0074" for policy details.  Use the cmake_policy
+[3.932s]   command to set the policy and suppress this warning.
+[3.932s] 
+[3.933s]   CMake variable PCL_ROOT is set to:
+[3.933s] 
+[3.933s]     /usr
+[3.933s] 
+[3.933s]   For compatibility, CMake is ignoring the variable.
+[3.933s] This warning is for project developers.  Use -Wno-dev to suppress it.
+[3.934s] 
+[3.951s] -- Found ackermann_msgs: 2.0.2 (/opt/ros/foxy/share/ackermann_msgs/cmake)
+[4.041s] -- Found nav_msgs: 2.0.5 (/opt/ros/foxy/share/nav_msgs/cmake)
+[4.207s] CMake Error at CMakeLists.txt:40 (find_package):
+[4.208s]   By not providing "Findsensor_msgs_py.cmake" in CMAKE_MODULE_PATH this
+[4.208s]   project has asked CMake to find a package configuration file provided by
+[4.208s]   "sensor_msgs_py", but CMake did not find one.
+[4.208s] 
+[4.208s]   Could not find a package configuration file provided by "sensor_msgs_py"
+[4.208s]   with any of the following names:
+[4.209s] 
+[4.209s]     sensor_msgs_pyConfig.cmake
+[4.209s]     sensor_msgs_py-config.cmake
+[4.209s] 
+[4.209s]   Add the installation prefix of "sensor_msgs_py" to CMAKE_PREFIX_PATH or set
+[4.209s]   "sensor_msgs_py_DIR" to a directory containing one of the above files.  If
+[4.209s]   "sensor_msgs_py" provides a separate development package or SDK, be sure it
+[4.210s]   has been installed.
+[4.210s] 
+[4.210s] 
+[4.217s] -- Configuring incomplete, errors occurred!
+[4.217s] See also "/sim_ws/src/lidar_processing/build/lidar_processing/CMakeFiles/CMakeOutput.log".
+[4.217s] See also "/sim_ws/src/lidar_processing/build/lidar_processing/CMakeFiles/CMakeError.log".
+[4.241s] make: *** [Makefile:354: cmake_check_build_system] Error 1
+[4.252s] Invoked command in '/sim_ws/src/lidar_processing/build/lidar_processing' returned '2': CMAKE_PREFIX_PATH=/opt/ros/foxy /usr/bin/cmake --build /sim_ws/src/lidar_processing/build/lidar_processing -- -j12 -l12

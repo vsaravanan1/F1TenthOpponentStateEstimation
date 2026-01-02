@@ -1,0 +1,185 @@
+[0.033s] Invoking command in '/sim_ws/src/lidar_processing/build/lidar_processing': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector /usr/bin/cmake /sim_ws/src/lidar_processing -DCMAKE_INSTALL_PREFIX=/sim_ws/src/lidar_processing/install/lidar_processing
+[0.146s] -- The C compiler identification is GNU 9.4.0
+[0.230s] -- The CXX compiler identification is GNU 9.4.0
+[0.239s] -- Check for working C compiler: /usr/bin/cc
+[0.339s] -- Check for working C compiler: /usr/bin/cc -- works
+[0.341s] -- Detecting C compiler ABI info
+[0.437s] -- Detecting C compiler ABI info - done
+[0.451s] -- Detecting C compile features
+[0.451s] -- Detecting C compile features - done
+[0.455s] -- Check for working CXX compiler: /usr/bin/c++
+[0.563s] -- Check for working CXX compiler: /usr/bin/c++ -- works
+[0.565s] -- Detecting CXX compiler ABI info
+[0.671s] -- Detecting CXX compiler ABI info - done
+[0.687s] -- Detecting CXX compile features
+[0.687s] -- Detecting CXX compile features - done
+[0.691s] -- Found ament_cmake: 0.9.12 (/opt/ros/foxy/share/ament_cmake/cmake)
+[0.737s] -- Found PythonInterp: /usr/bin/python3 (found suitable version "3.8.10", minimum required is "3") 
+[0.738s] -- Using PYTHON_EXECUTABLE: /usr/bin/python3
+[1.036s] -- Found rclcpp: 2.4.3 (/opt/ros/foxy/share/rclcpp/cmake)
+[1.120s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[1.128s] -- Found rosidl_adapter: 1.3.1 (/opt/ros/foxy/share/rosidl_adapter/cmake)
+[1.255s] -- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "1.1.1f")  
+[1.319s] -- Found FastRTPS: /opt/ros/foxy/include  
+[1.454s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[1.548s] -- Found rmw_implementation_cmake: 1.0.4 (/opt/ros/foxy/share/rmw_implementation_cmake/cmake)
+[1.563s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[1.565s] -- Looking for pthread.h
+[1.670s] -- Looking for pthread.h - found
+[1.671s] -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+[1.775s] -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Failed
+[1.775s] -- Looking for pthread_create in pthreads
+[1.858s] -- Looking for pthread_create in pthreads - not found
+[1.858s] -- Looking for pthread_create in pthread
+[1.970s] -- Looking for pthread_create in pthread - found
+[1.972s] -- Found Threads: TRUE  
+[2.237s] -- Found laser_geometry: 2.2.0 (/opt/ros/foxy/share/laser_geometry/cmake)
+[2.256s] -- Found sensor_msgs: 2.0.5 (/opt/ros/foxy/share/sensor_msgs/cmake)
+[2.422s] -- Found tf2: 0.13.14 (/opt/ros/foxy/share/tf2/cmake)
+[2.444s] -- Found tf2_ros: 0.13.14 (/opt/ros/foxy/share/tf2_ros/cmake)
+[2.951s] -- Found pcl_ros: 2.2.1 (/opt/ros/foxy/share/pcl_ros/cmake)
+[3.334s] -- Found Eigen3: TRUE (found version "3.3.7") 
+[3.395s] -- Checking for module 'eigen3'
+[3.419s] --   Found eigen3, version 3.3.7
+[3.473s] -- Found Eigen: /usr/include/eigen3 (Required is at least version "3.1") 
+[3.473s] -- Eigen found (include: /usr/include/eigen3, version: 3.3.7)
+[3.575s] -- Checking for module 'flann'
+[3.602s] --   Found flann, version 1.9.1
+[3.665s] -- Found FLANN: /usr/lib/x86_64-linux-gnu/libflann_cpp.so  
+[3.746s] -- The imported target "vtkParseOGLExt" references the file
+[3.746s]    "/usr/bin/vtkParseOGLExt-7.1"
+[3.747s] but this file does not exist.  Possible reasons include:
+[3.747s] * The file was deleted, renamed, or moved to another location.
+[3.747s] * An install or uninstall procedure did not complete successfully.
+[3.747s] * The installation package was faulty and contained
+[3.747s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[3.747s] but not all the files it references.
+[3.747s] 
+[3.748s] -- The imported target "vtkRenderingPythonTkWidgets" references the file
+[3.748s]    "/usr/lib/x86_64-linux-gnu/libvtkRenderingPythonTkWidgets.so"
+[3.748s] but this file does not exist.  Possible reasons include:
+[3.748s] * The file was deleted, renamed, or moved to another location.
+[3.748s] * An install or uninstall procedure did not complete successfully.
+[3.749s] * The installation package was faulty and contained
+[3.749s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[3.749s] but not all the files it references.
+[3.749s] 
+[3.749s] -- The imported target "vtk" references the file
+[3.749s]    "/usr/bin/vtk"
+[3.750s] but this file does not exist.  Possible reasons include:
+[3.750s] * The file was deleted, renamed, or moved to another location.
+[3.750s] * An install or uninstall procedure did not complete successfully.
+[3.750s] * The installation package was faulty and contained
+[3.750s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[3.750s] but not all the files it references.
+[3.750s] 
+[3.750s] -- The imported target "pvtk" references the file
+[3.751s]    "/usr/bin/pvtk"
+[3.751s] but this file does not exist.  Possible reasons include:
+[3.751s] * The file was deleted, renamed, or moved to another location.
+[3.751s] * An install or uninstall procedure did not complete successfully.
+[3.751s] * The installation package was faulty and contained
+[3.751s]    "/usr/lib/cmake/vtk-7.1/VTKTargets.cmake"
+[3.751s] but not all the files it references.
+[3.751s] 
+[3.781s] -- Checking for module 'libusb-1.0'
+[3.786s] --   No package 'libusb-1.0' found
+[3.789s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[3.790s] -- OpenNI disabled because libusb-1.0 not found.
+[3.797s] -- Checking for module 'libusb-1.0'
+[3.801s] --   No package 'libusb-1.0' found
+[3.804s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[3.805s] -- OpenNI 2 disabled because libusb-1.0 not found.
+[3.829s] -- LIBUSB_1_LIBRARY (missing: LIBUSB_1_INCLUDE_DIR) 
+[3.836s] -- Checking for module 'libusb-1.0'
+[3.841s] --   No package 'libusb-1.0' found
+[3.845s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[3.846s] -- OpenNI disabled because libusb-1.0 not found.
+[3.852s] -- Checking for module 'libusb-1.0'
+[3.857s] --   No package 'libusb-1.0' found
+[3.861s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[3.861s] -- OpenNI 2 disabled because libusb-1.0 not found.
+[3.890s] -- Found Qhull: optimized;/usr/lib/x86_64-linux-gnu/libqhull.so;debug;/usr/lib/x86_64-linux-gnu/libqhull.so  
+[3.891s] -- QHULL found (include: /usr/include, lib: optimized;/usr/lib/x86_64-linux-gnu/libqhull.so;debug;/usr/lib/x86_64-linux-gnu/libqhull.so)
+[3.897s] -- Checking for module 'libusb-1.0'
+[3.902s] --   No package 'libusb-1.0' found
+[3.907s] -- Could NOT find USB_10 (missing: USB_10_LIBRARY USB_10_INCLUDE_DIR) 
+[3.907s] -- OpenNI disabled because libusb-1.0 not found.
+[3.931s] -- Found PCL_COMMON: /usr/lib/x86_64-linux-gnu/libpcl_common.so  
+[3.933s] -- Found PCL_KDTREE: /usr/lib/x86_64-linux-gnu/libpcl_kdtree.so  
+[3.946s] -- Found PCL_OCTREE: /usr/lib/x86_64-linux-gnu/libpcl_octree.so  
+[3.949s] -- Found PCL_SEARCH: /usr/lib/x86_64-linux-gnu/libpcl_search.so  
+[3.951s] -- Found PCL_SAMPLE_CONSENSUS: /usr/lib/x86_64-linux-gnu/libpcl_sample_consensus.so  
+[3.953s] -- Found PCL_FILTERS: /usr/lib/x86_64-linux-gnu/libpcl_filters.so  
+[3.954s] -- Found PCL_2D: /usr/include/pcl-1.10  
+[3.964s] -- Found PCL_GEOMETRY: /usr/include/pcl-1.10  
+[3.966s] -- Found PCL_IO: /usr/lib/x86_64-linux-gnu/libpcl_io.so  
+[3.970s] -- Found PCL_FEATURES: /usr/lib/x86_64-linux-gnu/libpcl_features.so  
+[3.971s] -- Found PCL_ML: /usr/lib/x86_64-linux-gnu/libpcl_ml.so  
+[3.975s] -- Found PCL_SEGMENTATION: /usr/lib/x86_64-linux-gnu/libpcl_segmentation.so  
+[3.978s] -- Found PCL_VISUALIZATION: /usr/lib/x86_64-linux-gnu/libpcl_visualization.so  
+[3.979s] -- Found PCL_SURFACE: /usr/lib/x86_64-linux-gnu/libpcl_surface.so  
+[3.981s] -- Found PCL_REGISTRATION: /usr/lib/x86_64-linux-gnu/libpcl_registration.so  
+[3.984s] -- Found PCL_KEYPOINTS: /usr/lib/x86_64-linux-gnu/libpcl_keypoints.so  
+[3.985s] -- Found PCL_TRACKING: /usr/lib/x86_64-linux-gnu/libpcl_tracking.so  
+[3.989s] -- Found PCL_RECOGNITION: /usr/lib/x86_64-linux-gnu/libpcl_recognition.so  
+[3.990s] -- Found PCL_STEREO: /usr/lib/x86_64-linux-gnu/libpcl_stereo.so  
+[3.991s] -- Found PCL_APPS: /usr/lib/x86_64-linux-gnu/libpcl_apps.so  
+[3.993s] -- Found PCL_IN_HAND_SCANNER: /usr/include/pcl-1.10  
+[3.994s] -- Found PCL_POINT_CLOUD_EDITOR: /usr/include/pcl-1.10  
+[3.996s] -- Found PCL_OUTOFCORE: /usr/lib/x86_64-linux-gnu/libpcl_outofcore.so  
+[3.998s] -- Found PCL_PEOPLE: /usr/lib/x86_64-linux-gnu/libpcl_people.so  
+[4.424s] -- Found ament_lint_auto: 0.9.8 (/opt/ros/foxy/share/ament_lint_auto/cmake)
+[4.559s] -- Added test 'copyright' to check source files copyright and LICENSE
+[4.565s] -- Added test 'cppcheck' to perform static code analysis on C / C++ code
+[4.566s] -- Configured cppcheck include dirs: 
+[4.566s] -- Configured cppcheck exclude dirs and/or files: 
+[4.571s] -- Added test 'cpplint' to check C / C++ code against the Google style
+[4.571s] -- Configured cpplint exclude dirs and/or files: 
+[4.574s] -- Added test 'lint_cmake' to check CMake code style
+[4.581s] -- Added test 'uncrustify' to check C / C++ code style
+[4.581s] -- Configured uncrustify additional arguments: 
+[4.583s] -- Added test 'xmllint' to check XML markup files
+[4.590s] -- Configuring done
+[4.659s] -- Generating done
+[4.664s] -- Build files have been written to: /sim_ws/src/lidar_processing/build/lidar_processing
+[4.690s] Invoked command in '/sim_ws/src/lidar_processing/build/lidar_processing' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector /usr/bin/cmake /sim_ws/src/lidar_processing -DCMAKE_INSTALL_PREFIX=/sim_ws/src/lidar_processing/install/lidar_processing
+[4.698s] Invoking command in '/sim_ws/src/lidar_processing/build/lidar_processing': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector /usr/bin/cmake --build /sim_ws/src/lidar_processing/build/lidar_processing -- -j12 -l12
+[4.770s] [35m[1mScanning dependencies of target clustering[0m
+[4.770s] [35m[1mScanning dependencies of target scan_to_cloud_node[0m
+[4.891s] [ 25%] [32mBuilding CXX object CMakeFiles/scan_to_cloud_node.dir/src/scan_to_cloud.cpp.o[0m
+[4.942s] [ 50%] [32mBuilding CXX object CMakeFiles/clustering.dir/src/clustering.cpp.o[0m
+[9.563s] In file included from [01m[K/usr/include/pcl-1.10/pcl/octree/octree_base.h:45[m[K,
+[9.564s]                  from [01m[K/usr/include/pcl-1.10/pcl/octree/octree_pointcloud.h:41[m[K,
+[9.564s]                  from [01m[K/usr/include/pcl-1.10/pcl/octree/octree_search.h:43[m[K,
+[9.564s]                  from [01m[K/usr/include/pcl-1.10/pcl/search/octree.h:42[m[K,
+[9.564s]                  from [01m[K/usr/include/pcl-1.10/pcl/search/pcl_search.h:44[m[K,
+[9.564s]                  from [01m[K/usr/include/pcl-1.10/pcl/segmentation/extract_clusters.h:44[m[K,
+[9.564s]                  from [01m[K/sim_ws/src/lidar_processing/src/clustering.cpp:4[m[K:
+[9.564s] [01m[K/usr/include/pcl-1.10/pcl/octree/octree_key.h:155:9:[m[K [01;35m[Kwarning: [m[KISO C++ prohibits anonymous structs [[01;35m[K-Wpedantic[m[K]
+[9.565s]   155 |         [01;35m[K}[m[K;
+[9.565s]       |         [01;35m[K^[m[K
+[14.914s] [ 75%] [32m[1mLinking CXX executable scan_to_cloud_node[0m
+[15.877s] [ 75%] Built target scan_to_cloud_node
+[16.701s] [100%] [32m[1mLinking CXX executable clustering[0m
+[16.852s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o: in function `main':
+[16.853s] clustering.cpp:(.text+0x62): undefined reference to `pcl::search::KdTree<pcl::PointXYZ, pcl::KdTreeFLANN<pcl::PointXYZ, flann::L2_Simple<float> > >::KdTree(bool)'
+[16.854s] /usr/bin/ld: clustering.cpp:(.text+0x1aa): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setInputCloud(boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> const> const&)'
+[16.855s] /usr/bin/ld: clustering.cpp:(.text+0x1cf): undefined reference to `pcl::EuclideanClusterExtraction<pcl::PointXYZ>::extract(std::vector<pcl::PointIndices, std::allocator<pcl::PointIndices> >&)'
+[16.857s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o: in function `pcl::EuclideanClusterExtraction<pcl::PointXYZ>::EuclideanClusterExtraction()':
+[16.857s] clustering.cpp:(.text._ZN3pcl26EuclideanClusterExtractionINS_8PointXYZEEC2Ev[_ZN3pcl26EuclideanClusterExtractionINS_8PointXYZEEC5Ev]+0x18): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::PCLBase()'
+[16.858s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o:(.data.rel.ro._ZTVN3pcl26EuclideanClusterExtractionINS_8PointXYZEEE[_ZTVN3pcl26EuclideanClusterExtractionINS_8PointXYZEEE]+0x20): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setInputCloud(boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> const> const&)'
+[16.858s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o:(.data.rel.ro._ZTVN3pcl26EuclideanClusterExtractionINS_8PointXYZEEE[_ZTVN3pcl26EuclideanClusterExtractionINS_8PointXYZEEE]+0x28): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setIndices(boost::shared_ptr<std::vector<int, std::allocator<int> > > const&)'
+[16.858s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o:(.data.rel.ro._ZTVN3pcl26EuclideanClusterExtractionINS_8PointXYZEEE[_ZTVN3pcl26EuclideanClusterExtractionINS_8PointXYZEEE]+0x30): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setIndices(boost::shared_ptr<std::vector<int, std::allocator<int> > const> const&)'
+[16.859s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o:(.data.rel.ro._ZTVN3pcl26EuclideanClusterExtractionINS_8PointXYZEEE[_ZTVN3pcl26EuclideanClusterExtractionINS_8PointXYZEEE]+0x38): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setIndices(boost::shared_ptr<pcl::PointIndices const> const&)'
+[16.859s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o:(.data.rel.ro._ZTVN3pcl26EuclideanClusterExtractionINS_8PointXYZEEE[_ZTVN3pcl26EuclideanClusterExtractionINS_8PointXYZEEE]+0x40): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setIndices(unsigned long, unsigned long, unsigned long, unsigned long)'
+[16.859s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o:(.data.rel.ro._ZTVN3pcl7PCLBaseINS_8PointXYZEEE[_ZTVN3pcl7PCLBaseINS_8PointXYZEEE]+0x20): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setInputCloud(boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> const> const&)'
+[16.860s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o:(.data.rel.ro._ZTVN3pcl7PCLBaseINS_8PointXYZEEE[_ZTVN3pcl7PCLBaseINS_8PointXYZEEE]+0x28): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setIndices(boost::shared_ptr<std::vector<int, std::allocator<int> > > const&)'
+[16.860s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o:(.data.rel.ro._ZTVN3pcl7PCLBaseINS_8PointXYZEEE[_ZTVN3pcl7PCLBaseINS_8PointXYZEEE]+0x30): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setIndices(boost::shared_ptr<std::vector<int, std::allocator<int> > const> const&)'
+[16.860s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o:(.data.rel.ro._ZTVN3pcl7PCLBaseINS_8PointXYZEEE[_ZTVN3pcl7PCLBaseINS_8PointXYZEEE]+0x38): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setIndices(boost::shared_ptr<pcl::PointIndices const> const&)'
+[16.860s] /usr/bin/ld: CMakeFiles/clustering.dir/src/clustering.cpp.o:(.data.rel.ro._ZTVN3pcl7PCLBaseINS_8PointXYZEEE[_ZTVN3pcl7PCLBaseINS_8PointXYZEEE]+0x40): undefined reference to `pcl::PCLBase<pcl::PointXYZ>::setIndices(unsigned long, unsigned long, unsigned long, unsigned long)'
+[16.866s] collect2: error: ld returned 1 exit status
+[16.868s] make[2]: *** [CMakeFiles/clustering.dir/build.make:84: clustering] Error 1
+[16.869s] make[1]: *** [CMakeFiles/Makefile2:80: CMakeFiles/clustering.dir/all] Error 2
+[16.869s] make: *** [Makefile:141: all] Error 2
+[16.877s] Invoked command in '/sim_ws/src/lidar_processing/build/lidar_processing' returned '2': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/sim_ws/install/lidar_processing:/opt/ros/foxy:/sim_ws/install/py_wallfollow:/sim_ws/install/gt_follow_gap:/sim_ws/install/f1tenth_gym_ros:/sim_ws/install/drift_detector /usr/bin/cmake --build /sim_ws/src/lidar_processing/build/lidar_processing -- -j12 -l12

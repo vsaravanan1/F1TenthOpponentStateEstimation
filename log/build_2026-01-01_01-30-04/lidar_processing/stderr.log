@@ -1,0 +1,30 @@
+CMake Warning (dev) at CMakeLists.txt:36 (find_package):
+  Policy CMP0074 is not set: find_package uses <PackageName>_ROOT variables.
+  Run "cmake --help-policy CMP0074" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+
+  CMake variable PCL_ROOT is set to:
+
+    /usr
+
+  For compatibility, CMake is ignoring the variable.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Error at CMakeLists.txt:40 (find_package):
+  By not providing "Findsensor_msgs_py.cmake" in CMAKE_MODULE_PATH this
+  project has asked CMake to find a package configuration file provided by
+  "sensor_msgs_py", but CMake did not find one.
+
+  Could not find a package configuration file provided by "sensor_msgs_py"
+  with any of the following names:
+
+    sensor_msgs_pyConfig.cmake
+    sensor_msgs_py-config.cmake
+
+  Add the installation prefix of "sensor_msgs_py" to CMAKE_PREFIX_PATH or set
+  "sensor_msgs_py_DIR" to a directory containing one of the above files.  If
+  "sensor_msgs_py" provides a separate development package or SDK, be sure it
+  has been installed.
+
+
+make: *** [Makefile:354: cmake_check_build_system] Error 1
