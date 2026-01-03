@@ -17,9 +17,9 @@ The perception stack we developed for the F1Tenth vehicle operates in multiple s
 In the first iteration of this project, we experimented with a rule-based approach to car cluster identification that consisted primarily of simple hueristics. This method worked fine under very specific circumstances, but it proved difficult to generalize and was very susceptible to incorrectly detecting corners of the racetrack as the opponent vehicle. The SVM performed significantly better in distinguishing between the wall clusters and the opponent car cluster, and it was also more generalizable across a variety of maps (both 'levine' and 'spielberg' were tested).
 ### IMM Filter
 Standard Kalman Filters often struggle with the non-linear behavior of racing (sudden braking or sharp turns). Our IMM filter addresses this by running three models in parallel:
-1. Constant Velocity (CV): Assumes the opponent is traveling at fixed speed on a straight road.
-2. Constant Acceleration (CA): Captures sudden bursts of speed or heavy braking zones.
-3. Constant Turn Rate (CTR): Predicts behavior during cornering and hairpins.
+**1. Constant Velocity (CV):** Assumes the opponent is traveling at fixed speed on a straight road.
+**2. Constant Acceleration (CA):** Captures sudden bursts of speed or heavy braking zones.
+**3. Constant Turn Rate (CTR):** Predicts behavior during cornering and hairpins.
 The filter dynamically weights these models based on real-time observations, allowing for high-fidelity trajectory prediction during a variety of maneuvers.
 
 ## Example Trajectory Generated
