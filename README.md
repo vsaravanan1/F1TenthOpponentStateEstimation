@@ -32,7 +32,7 @@ The filter dynamically weights these models based on real-time observations, all
 ### Perception Stack
 * Navigate to the `/sim_ws/src` directory within the simulation's Docker container and clone this repository there. You might need to then rename it to `lidar_processing` for the package to be built appropriately.
 * Source your terminal if you haven't done so already and install dependencies listed in the package.xml file with **rosdep** as shown below:
-  ``bash
+  `` bash
   source /opt/ros/foxy/setup.bash
   source ../install/setup.bash
   cd /sim_ws
