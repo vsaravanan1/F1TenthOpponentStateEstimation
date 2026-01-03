@@ -1,5 +1,5 @@
 # Opponent State Estimation for F1Tenth / Roboracer Car
-**Vignesh Saravanan and Mohana Pamidimukkala**
+**Vignesh Saravanan and Mohana Pamidimukkala**\
 **Trustworthy Engineered Autonomy Lab**
 
 ## System Architecture
@@ -21,6 +21,9 @@ Standard Kalman Filters often struggle with the non-linear behavior of racing (s
 2. Constant Acceleration (CA): Captures sudden bursts of speed or heavy braking zones.
 3. Constant Turn Rate (CTR): Predicts behavior during cornering and hairpins.
 The filter dynamically weights these models based on real-time observations, allowing for high-fidelity trajectory prediction during a variety of maneuvers.
+
+##Example Trajectory Generated
+!(https://media.discordapp.net/attachments/927036873312972850/1456829543930134679/image.png?ex=6959c9bd&is=6958783d&hm=a0c7755224338af611cafac485fd7cf8e89143a8b760e9b5e3903afe6dc15888&=&format=webp&quality=lossless&width=1157&height=642)
 
 ## Usage
 ### Roboracer Simulator
