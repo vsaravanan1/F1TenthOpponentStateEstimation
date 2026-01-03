@@ -13,7 +13,6 @@ The perception stack we developed for the F1Tenth vehicle operates in multiple s
 ## Design Choices
 ### DBSCAN Clustering
 We used **DBSCAN** because it is particularly effective for LiDAR data, given that it doesn't require specification of the number of clusters in advance and allows significant customization using the Epsilon and MinPts parameters, which control, respectively, the minimum separation distance between points in two different clusters and the number of points surrounding a given point in order for it to be considered a "core point" (worthy of being the center of its own cluster).
-
 ### Support Vector Machine (SVM) Classification
 In the first iteration of this project, we experimented with a rule-based approach to car cluster identification that consisted primarily of simple hueristics. This method worked fine under very specific circumstances, but it proved difficult to generalize and was very susceptible to incorrectly detecting corners of the racetrack as the opponent vehicle. The SVM performed significantly better in distinguishing between the wall clusters and the opponent car cluster, and it was also more generalizable across a variety of maps (both 'levine' and 'spielberg' were tested). 
 
