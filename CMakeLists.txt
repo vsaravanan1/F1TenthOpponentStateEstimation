@@ -75,16 +75,6 @@ ament_target_dependencies(bounding_box
   tf2_sensor_msgs
 )
 
-add_executable(clustering src/clustering.cpp)
-ament_target_dependencies(clustering
-  rclcpp
-  sensor_msgs
-  pcl_ros
-  pcl_conversions
-)
-
-
-target_link_libraries(clustering ${PCL_LIBRARIES})
 
 # =====================
 # Install targets
@@ -92,14 +82,12 @@ target_link_libraries(clustering ${PCL_LIBRARIES})
 install(TARGETS
   scan_to_cloud
   bounding_box
-  clustering
   DESTINATION lib/${PROJECT_NAME}
 )
 
 install(PROGRAMS
   scripts/imm_filterpy.py
   scripts/clustering.py
-  scripts/spline_gen.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
