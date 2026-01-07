@@ -39,6 +39,12 @@ class IMMNode(Node):
             Float64MultiArray, '/state_vector', self.state_callback, 10)
         self.traj_pub = self.create_publisher(Path, '/imm_path', 10)
 
+        self.last_publish_time = self.get_clock().now()
+        self.publish_interval = 0.05
+
+
+
+
     def create_kf_cv(self, dt):
         kf = KalmanFilter(dim_x=6, dim_z=4) # Observe x, y, vx, vy
         kf.F = np.array([
@@ -66,12 +72,12 @@ class IMMNode(Node):
         kf = KalmanFilter(dim_x=6, dim_z=4)
         # scale factor of acceleration is very low to minimize chances of predicted trajectory going off the map
         kf.F = np.array([
-            [1, 0, dt, 0, 0.001*dt**2, 0],
-            [0, 1, 0, dt, 0, 0.001*dt**2],
+            [1, 0, dt, 0, 0.5*dt**2, 0],
+            [0, 1, 0, dt, 0, 0.5*dt**2],
             [0, 0, 1, 0, dt, 0],
             [0, 0, 0, 1, 0, dt],
-            [0, 0, 0, 0, 1, 0],
-            [0, 0, 0, 0, 0, 1]
+            [0, 0, 0, 0, 0.95, 0],
+            [0, 0, 0, 0, 0, 0.95]
         ])
         kf.H = np.array([
             [1, 0, 0, 0, 0, 0],
@@ -80,7 +86,7 @@ class IMMNode(Node):
             [0, 0, 0, 1, 0, 0]
         ])
         kf.R = np.eye(4) * 0.10
-        kf.Q = np.diag([0.01, 0.01, 0.01, 0.01, 0.0001, 0.0001])
+        kf.Q = np.diag([0.01, 0.01, 0.05, 0.05, 0.5, 0.5])
         kf.P *= 1.0
         kf.x = np.zeros(6)
         return kf
@@ -156,11 +162,21 @@ class IMMNode(Node):
 
         self.update_filter_matrices(dt, vx, vy)
         
-        self.imm_model.predict()
         z = np.array([x, y, vx, vy])
+        self.imm_model.predict()
         self.imm_model.update(z)
+
+        # Clamp acceleration to reasonable bounds just in case the taj gen goes off map
+        self.imm_model.x[4] = np.clip(self.imm_model.x[4], -3.0, 3.0)  # ax
+        self.imm_model.x[5] = np.clip(self.imm_model.x[5], -3.0, 3.0)  # ay
         
-        pred = self.generate_prediction(steps=15, dt=(dt/15))
+        # Also clamp velocity if needed
+        self.imm_model.x[2] = np.clip(self.imm_model.x[2], -10.0, 10.0)  # vx
+        self.imm_model.x[3] = np.clip(self.imm_model.x[3], -10.0, 10.0)  # vy
+
+
+        # reducing prediction steps to less lag 
+        pred = self.generate_prediction(steps=10, dt=(dt/15))
         min_x = np.min(pred[:,0])
         max_x = np.max(pred[:,0])
         min_y = np.min(pred[:,1])
@@ -169,7 +185,13 @@ class IMMNode(Node):
 
         # filter out trajectories that are too long / go off the map (likely formed due to noisy data or incorrect identification of opponent cluster)
         if distance_squared <= 20:
-            self.publish_path(pred.tolist())
+            #publishing less frequently 
+            current_time = self.get_clock().now()
+            time_diff = (current_time - self.last_publish_time).nanoseconds / 1e9
+            
+            if time_diff >= self.publish_interval:
+                self.publish_path(pred.tolist())
+                self.last_publish_time = current_time
 
     def generate_prediction(self, steps, dt):
         """Generate predicted trajectory by forward-propagation of the best model"""
@@ -177,10 +199,10 @@ class IMMNode(Node):
         best_idx = np.argmax(self.imm_model.mu)
         F_best = self.imm_model.filters[best_idx].F
         
-        prediction = []
-        for _ in range(steps):
+        prediction = np.zeros((steps, 2))
+        for i in range(steps):
             curr_state = np.dot(F_best, curr_state)
-            prediction.append((curr_state[0], curr_state[1]))
+            prediction[i] = curr_state[:2]
             
         return np.array(prediction)
 
