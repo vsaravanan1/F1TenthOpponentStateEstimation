@@ -98,7 +98,13 @@ class IMMInterceptorNode(Node):
             opp_time = idx * self.dt
             
             time_diff = ego_time - opp_time
-            return time_diff**2 if time_diff > 0 else abs(time_diff) * 0.1
+            # return time_diff**2 if time_diff > 0 else abs(time_diff) * 0.1
+
+            # less harsh pentaly if the diffrence is large
+            if time_diff > 0:
+                return time_diff * 2.0
+            else:
+                return abs(time_diff) * 0.1
         
         # Optimize to find best intercept index
         result = minimize_scalar(
