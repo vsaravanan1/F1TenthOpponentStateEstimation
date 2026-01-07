@@ -87,6 +87,7 @@ install(TARGETS
 
 install(PROGRAMS
   scripts/imm_filterpy.py
+  scripts/interceptor.py
   scripts/clustering.py
   DESTINATION lib/${PROJECT_NAME}
 )
