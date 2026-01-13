@@ -39,6 +39,11 @@ The filter dynamically weights these models based on real-time observations, all
   cd /sim_ws
   rosdep install -i --from-path src --rosdistro foxy -y
   ```
+* We must install some more dependencies
+   ``` bash
+  pip install filterpy
+  sudo apt-get install ros-foxy-sensor-msgs-py
+  ```
 * Now, use `pip` to install all necessary python dependencies within the Docker container. This includes `numpy`, `pandas`, and `scikit-learn.`
 * The tool `tmux` should already be installed within the Docker container, so use it to create 4 new terminal windows. The simulator can be run in the first window. The second window can be used for running this perception package, which can be launched using the command `ros2 launch lidar_processing launch_lidar_processing.py`. The third and fourth windows can be used to run `gt_reactive_node.py` and `gt_offensive_node.py`, respectively. Both are running the `gt_follow_gap` algorithm, which we did not design but did attempt to optimize by modifying the hyperparameters. The last two nodes are not part of the `lidar_processing` package, so they can be run just as regular Python files. However, because both nodes use the `rclpy` package, make sure to source each `tmux` terminal as shown above before running its respective files.
 ### Simulator Car Visualization Instructions
