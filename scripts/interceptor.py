@@ -53,6 +53,8 @@ class IMMInterceptorNode(Node):
         self.ego_vx = msg.data[2]
         self.ego_vy = msg.data[3]
 
+        self.get_logger().info(f"Ego updated: ({self.ego_x:.2f}, {self.ego_y:.2f})")
+
 
     def imm_path_callback(self, path_msg):
 
