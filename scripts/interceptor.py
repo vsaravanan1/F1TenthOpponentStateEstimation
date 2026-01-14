@@ -40,6 +40,8 @@ class IMMInterceptorNode(Node):
 
         self.dt = 0.05  # Time step between prediction points
 
+        self.spline_resolution = 100 # num of pts for splie, make bigger for tighter curves and more accurate splines
+
         self.get_logger().info("-----------started Interceptor node----------")
 
     def ego_state_callback(self, msg):
@@ -71,10 +73,14 @@ class IMMInterceptorNode(Node):
         if intercept_point is not None:
             self.get_logger().info("[interceptor.py debug] Publishing intercept marker")
             self.publish_intercept_marker(intercept_point)
+            self.gen_pub_spline(intercept_point)
+
         else:
-            self.get_logger().warn("[interceptor.py debug] No intercept point found")
+            self.get_logger().warn("[interceptor.py debug] No intercept point found - no path generater")
 
         # generate interceptor spline
+
+
 
         
 
@@ -127,6 +133,59 @@ class IMMInterceptorNode(Node):
         )
         
         return intercept_point, best_idx
+
+    def gen_pub_spline(self, intercept_point):
+
+        ego_pos = np.array([self.ego_x, self.ego_y])
+
+
+        # TO make a spline, make waypoints 
+        mid_point = (ego_pos + intercept_point) / 2.0
+
+        control_points = np.array([ego_pos, mid_point, intercept_point])
+
+        #need k +1 poitns for cubic spline
+
+        if len(control_points) < 4:
+            quarter_point = 0.75 * ego_pos + 0.25 * intercept_point
+            three_quarter_point = 0.25 * ego_pos + 0.75 * intercept_point
+            control_points = np.array([ego_pos, quarter_point, three_quarter_point, intercept_point])
+        
+        x = control_points[:, 0]
+        y = control_points[:, 1]
+
+        try:
+            
+            # spline will pass through all points - Using SciPy
+            tck, u = splprep([x, y], s=0, k=3)
+            
+            # Generate points along the spline
+            u_new = np.linspace(0, 1, self.spline_resolution)
+            spline_x, spline_y = splev(u_new, tck)
+            
+            # Create Path message - To publihs itnerceptor spline 
+            path_msg = Path()
+            path_msg.header.frame_id = "map"
+            path_msg.header.stamp = self.get_clock().now().to_msg()
+            
+            for i in range(len(spline_x)):
+                pose = PoseStamped()
+                pose.header.frame_id = "map"
+                pose.header.stamp = path_msg.header.stamp
+                pose.pose.position.x = float(spline_x[i])
+                pose.pose.position.y = float(spline_y[i])
+                pose.pose.position.z = 0.0
+                pose.pose.orientation.w = 1.0
+                
+                path_msg.poses.append(pose)
+            
+            # Publish the spline path
+            self.interpector_pub.publish(path_msg)
+            self.get_logger().info(f"Published interceptor spline with {len(path_msg.poses)} points")
+            
+        except Exception as e:
+            self.get_logger().error(f"cannot generate spline: {str(e)}")
+
 
     def publish_intercept_marker(self, intercept_point):
 
