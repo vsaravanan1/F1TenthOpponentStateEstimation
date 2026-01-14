@@ -6,6 +6,7 @@ from scipy.interpolate import splprep, splev
 from scipy.optimize import minimize_scalar
 from nav_msgs.msg import Path
 from std_msgs.msg import Float64MultiArray
+from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import Marker
 
@@ -24,7 +25,7 @@ class IMMInterceptorNode(Node):
         self.imm_path_sub = self.create_subscription(Path, '/imm_path', self.imm_path_callback, 10)
 
         # sub to ego vehicle state(need to chage these topcis for car softwarer)
-        self.ego_state_sub = self.create_subscription(Float64MultiArray, '/ego_state', self.ego_state_callback, 10)
+        self.ego_state_sub = self.create_subscription(Odometry, '/ego_racecar/odom', self.ego_state_callback, 10)
 
         self.interpector_pub = self.create_publisher(Path, '/interceptor_spline', 10)
 
@@ -40,18 +41,18 @@ class IMMInterceptorNode(Node):
 
         self.dt = 0.05  # Time step between prediction points
 
-        self.spline_resolution = 100 # num of pts for splie, make bigger for tighter curves and more accurate splines
+        self.spline_resolution = 20 # num of pts for splie, make bigger for tighter curves and more accurate splines
 
         self.get_logger().info("-----------started Interceptor node----------")
 
     def ego_state_callback(self, msg):
 
         # gets the ego vehicle state
-
-        self.ego_x = msg.data[0]
-        self.ego_y = msg.data[1]
-        self.ego_vx = msg.data[2]
-        self.ego_vy = msg.data[3]
+        
+        self.ego_x = msg.pose.pose.position.x
+        self.ego_y = msg.pose.pose.position.y
+        self.ego_vx = msg.twist.twist.linear.x
+        self.ego_vy = msg.twist.twist.linear.y
 
         self.get_logger().info(f"Ego updated: ({self.ego_x:.2f}, {self.ego_y:.2f})")
 
@@ -139,7 +140,7 @@ class IMMInterceptorNode(Node):
     def gen_pub_spline(self, intercept_point):
 
         ego_pos = np.array([self.ego_x, self.ego_y])
-
+        print(ego_pos)
 
         # TO make a spline, make waypoints 
         mid_point = (ego_pos + intercept_point) / 2.0
