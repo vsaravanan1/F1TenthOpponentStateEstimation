@@ -12,6 +12,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from std_msgs.msg import Float64MultiArray
+from cv2 import minAreaRect
 
 
 class ClusteringNode(Node):
@@ -28,7 +29,7 @@ class ClusteringNode(Node):
 
         # publisher for filtered LiDAR cluster (identified as opponent vehicle)
         self.filtered_cluster_pub = self.create_publisher(PointCloud2, '/filtered_cluster', 10)
-        self.switching_threshold = 0.1
+        self.switching_threshold = 0.2
         # self.record_count = np.int64(1)
         
         # classification model (SVM) and standard scaler based on training data

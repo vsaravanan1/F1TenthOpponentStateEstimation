@@ -15,6 +15,9 @@ class IMMNode(Node):
         self.dt = 0.05
         self.prev_deg = 0.00
         self.prev_w = 0.0
+        self.prev_x = 0.0
+        self.prev_y = 0.0
+        self.first_callback = True
         
         # Create the kalman filters
         # State vector: [x, y, vx, vy, ax, ay]
@@ -38,9 +41,10 @@ class IMMNode(Node):
         self.state_sub = self.create_subscription(
             Float64MultiArray, '/state_vector', self.state_callback, 10)
         self.traj_pub = self.create_publisher(Path, '/imm_path', 10)
+        self.wait_count = 0
 
         self.last_publish_time = self.get_clock().now()
-        self.publish_interval = 0.05
+        self.publish_interval = 0.005
 
 
 
@@ -70,7 +74,7 @@ class IMMNode(Node):
     def create_kf_ca(self, dt):
         """Creates constant-acceleration Kalman Filter """
         kf = KalmanFilter(dim_x=6, dim_z=4)
-        # scale factor of acceleration is very low to minimize chances of predicted trajectory going off the map
+        
         kf.F = np.array([
             [1, 0, dt, 0, 0.5*dt**2, 0],
             [0, 1, 0, dt, 0, 0.5*dt**2],
@@ -86,7 +90,7 @@ class IMMNode(Node):
             [0, 0, 0, 1, 0, 0]
         ])
         kf.R = np.eye(4) * 0.10
-        kf.Q = np.diag([0.01, 0.01, 0.05, 0.05, 0.5, 0.5])
+        kf.Q = np.diag([0.01, 0.01, 0.01, 0.01, 0.1, 0.1])
         kf.P *= 1.0
         kf.x = np.zeros(6)
         return kf
@@ -132,9 +136,9 @@ class IMMNode(Node):
         # CT Model
         deg = np.degrees(np.arctan2(vy, vx))
         w = np.radians((deg - self.prev_deg)/dt)
-        w = np.clip(w, -0.5, 0.5)
+        w = np.clip(w, -0.3, 0.3)
         w = 0.35 * self.prev_w + 0.65 * w
-        w = np.clip(w, -0.5, 0.5)
+        w = np.clip(w, -0.3, 0.3)
         self.prev_deg = deg
         self.prev_w = w
         
@@ -159,7 +163,15 @@ class IMMNode(Node):
         if dt > 0.16:
             return
 
-
+        dist_from_prev_squared = (x - self.prev_x)**2 + (y - self.prev_y)**2
+        if not self.first_callback and dist_from_prev_squared > 3:
+            self.wait_count += 1
+            if self.wait_count <= 10:
+                return 
+            else:
+                self.wait_count = 0
+                
+            
         self.update_filter_matrices(dt, vx, vy)
         
         z = np.array([x, y, vx, vy])
@@ -189,9 +201,13 @@ class IMMNode(Node):
             current_time = self.get_clock().now()
             time_diff = (current_time - self.last_publish_time).nanoseconds / 1e9
             
-            if time_diff >= self.publish_interval:
-                self.publish_path(pred.tolist())
-                self.last_publish_time = current_time
+            # if time_diff >= self.publish_interval:
+            self.publish_path(pred.tolist())
+            self.last_publish_time = current_time
+        if self.first_callback:
+            self.first_callback = False
+        self.prev_x = x
+        self.prev_y = y
 
     def generate_prediction(self, steps, dt):
         """Generate predicted trajectory by forward-propagation of the best model"""
