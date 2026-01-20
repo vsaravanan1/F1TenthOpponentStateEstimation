@@ -208,6 +208,7 @@ class IMMNode(Node):
             self.first_callback = False
         self.prev_x = x
         self.prev_y = y
+        self.wait_count = 0
 
     def generate_prediction(self, steps, dt):
         """Generate predicted trajectory by forward-propagation of the best model"""
