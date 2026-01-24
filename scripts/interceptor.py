@@ -8,7 +8,9 @@ from nav_msgs.msg import Path
 from std_msgs.msg import Float64MultiArray
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import LaserScan
 from visualization_msgs.msg import Marker
+import math
 
 """
 This class :
@@ -27,9 +29,11 @@ class IMMInterceptorNode(Node):
         # sub to ego vehicle state(need to chage these topcis for car softwarer)
         self.ego_state_sub = self.create_subscription(Odometry, '/ego_racecar/odom', self.ego_state_callback, 10)
 
-        self.interpector_pub = self.create_publisher(Path, '/interceptor_spline', 10)
+        self.interceptor_pub = self.create_publisher(Path, '/interceptor_spline', 10)
 
         self.intercept_marker_pub = self.create_publisher(Marker, '/intercept_point_marker', 10)
+
+        self.lidar_scan_sub = self.create_subscription(LaserScan, '/scan', self.lidar_scan_callback, 10)
 
         self.ego_x = 0.0
         self.ego_y = 0.0
@@ -38,12 +42,29 @@ class IMMInterceptorNode(Node):
         self.max_ego_speed = 5.0
         self.max_ego_accel = 3.0
         self.length_of_the_car = 0.5
+        self.opp_path = None
 
         self.dt = 0.05  # Time step between prediction points
 
-        self.spline_resolution = 20 # num of pts for splie, make bigger for tighter curves and more accurate splines
+        self.spline_resolution = 20 # num of pts for spline, make bigger for tighter curves and more accurate splines
+        
+        self.distances_by_angle = np.zeros(1080)
 
         self.get_logger().info("-----------started Interceptor node----------")
+
+    def lidar_scan_callback(self, msg):
+        self.processed_lidar = []
+        rmin = max(0.0, msg.range_min)
+        rmax = msg.range_max if math.isfinite(msg.range_max) else 4.0
+        cap = min(4.0, rmax)
+        for r in msg.ranges:
+            if not math.isfinite(r) or r <= rmin:
+                self.processed_lidar.append(0.0)
+            else:
+                self.processed_lidar.append(min(float(r), cap))
+        self.distances_by_angle = np.array(self.processed_lidar)
+
+
 
     def ego_state_callback(self, msg):
 
@@ -58,7 +79,6 @@ class IMMInterceptorNode(Node):
 
 
     def imm_path_callback(self, path_msg):
-
         # here get the predicted path of oppornenet vehcile 
         print("GOT IMM PATH FOR INTERCEPTOR")
         if( len(path_msg.poses) == 0):
@@ -68,6 +88,8 @@ class IMMInterceptorNode(Node):
             [pose.pose.position.x, pose.pose.position.y] 
             for pose in path_msg.poses
         ]) # In a numpy array
+
+        self.opp_path = opponent_trajectory
 
         # Find the best intercept point
 
@@ -82,10 +104,6 @@ class IMMInterceptorNode(Node):
             self.get_logger().warn("[interceptor.py debug] No intercept point found - no path generater")
 
         # generate interceptor spline
-
-
-
-        
 
     def find_optimal_intercept(self, opponent_trajectory):
         
@@ -137,6 +155,18 @@ class IMMInterceptorNode(Node):
         
         return intercept_point, best_idx
 
+    def get_waypoints(self, intercept_point):
+        ego_pos = np.array([self.ego_x, self.ego_y])
+        heading_vect = np.array([self.opp_path[4, 0] - self.opp_path[0, 0], self.opp_path[4, 1] - self.opp_path[0, 1]])
+        heading_vect = heading_vect/np.abs(heading_vect)
+        heading_angle = np.rad2deg(np.arctan2(heading_vect[1], heading_vect[0]))
+        possible_targets = np.array([[np.cos(np.deg2rad(heading_angle+90)), np.sin(np.deg2rad(heading_angle+90))],
+                                     [np.cos(np.deg2rad(heading_angle-90)), np.sin(np.deg2rad(heading_angle-90))]])
+        possible_waypoints = [intercept_point + possible_targets[0]*0.5, intercept_point + possible_targets[1]*0.5]
+        
+
+        
+
     def gen_pub_spline(self, intercept_point):
 
         ego_pos = np.array([self.ego_x, self.ego_y])
@@ -147,7 +177,7 @@ class IMMInterceptorNode(Node):
 
         control_points = np.array([ego_pos, mid_point, intercept_point])
 
-        #need k +1 poitns for cubic spline
+        #need k +1 points for cubic spline
 
         if len(control_points) < 4:
             quarter_point = 0.75 * ego_pos + 0.25 * intercept_point
@@ -183,7 +213,7 @@ class IMMInterceptorNode(Node):
                 path_msg.poses.append(pose)
             
             # Publish the spline path
-            self.interpector_pub.publish(path_msg)
+            self.interceptor_pub.publish(path_msg)
             self.get_logger().info(f"Published interceptor spline with {len(path_msg.poses)} points")
             
         except Exception as e:

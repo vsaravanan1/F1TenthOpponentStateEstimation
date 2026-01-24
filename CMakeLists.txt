@@ -89,8 +89,10 @@ install(PROGRAMS
   scripts/imm_filterpy.py
   scripts/interceptor.py
   scripts/clustering.py
+  scripts/global_raceline_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
+
 
 # =====================
 # Testing
