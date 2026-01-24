@@ -28,5 +28,10 @@ def generate_launch_description():
             name='ClusteringNode',
             executable='clustering.py'
         ),
+        Node(
+            package="lidar_processing",
+            name="GlobalRacelinePublisher",
+            executable="global_raceline_publisher.py"
+        )
     ])
 
