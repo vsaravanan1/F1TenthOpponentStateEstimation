@@ -7,6 +7,7 @@ from std_msgs.msg import Float64MultiArray, String
 from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import PoseStamped, Pose
 from rclpy.time import Time
+import csv
 
 
 class IMMNode(Node):
@@ -21,6 +22,9 @@ class IMMNode(Node):
         self.prev_y = 0.0
         self.first_callback = True
         self.last_odom_pub_time = self.get_clock().now()
+        self.filter_counts = np.zeros(3)
+        self.num_callbacks = 0
+        self.frequencies = np.empty(3, dtype=np.float64)
 
         # Create the kalman filters
         # State vector: [x, vx, ax, y, vy, ay]
@@ -215,7 +219,7 @@ class IMMNode(Node):
             # if w is too small, use CV matrix
             # small angle approximation
             sw = dt 
-            lhs = 1/2 * dt^2
+            lhs = 1/2 * dt**2
         else: 
             sw = s/w
             lhs = (1 - c) / (w**2)
@@ -312,10 +316,11 @@ class IMMNode(Node):
         self.wait_count = 0
 
     def odom_callback(self, msg : Odometry):
+        self.get_logger().info("Publish")
         x, y = msg.pose.pose.position.x, msg.pose.pose.position.y
         current_time = self.get_clock().now()
         dt = 0.150
-        if current_time - self.last_odom_pub_time > dt:
+        if (current_time - self.last_odom_pub_time).nanoseconds/(1e9) > dt:
             publish = True
         else:
             publish = False
@@ -354,7 +359,7 @@ class IMMNode(Node):
 
 
             # reducing prediction steps to less lag 
-            pred = self.generate_prediction(steps=15, dt=(dt/10))
+            pred = self.generate_prediction(steps=45, dt=(dt/3))
             min_x = np.min(pred[:,0])
             max_x = np.max(pred[:,0])
             min_y = np.min(pred[:,1])
@@ -400,6 +405,22 @@ class IMMNode(Node):
             path_msg.poses.append(ps)
             
         self.traj_pub.publish(path_msg)
+
+    def publish_model_stats(self):
+        filter_names = ["cv", "ca", "ct"]
+        chosen_filter_idx = np.argmax(self.imm_model.mu)
+        self.filter_counts[chosen_filter_idx] += 1
+        chosen_filter = filter_names[chosen_filter]
+        self.num_callbacks += 1
+        if self.num_callbacks >= 1:
+            self.frequencies = self.filter_counts/self.num_callbacks
+        if self.num_callbacks == 500:
+            self.filter_counts = np.zeros(3)
+            self.num_callbacks = 0
+            return
+        with open("frequencies.csv", "w") as csv_file:
+            csvwriter = csv.writer(csv_file)
+            csvwriter.writerow(self.frequencies.tolist())
 
 def main(args=None):
     rclpy.init(args=args)
