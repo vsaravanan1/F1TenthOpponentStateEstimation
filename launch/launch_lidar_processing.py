@@ -15,6 +15,11 @@ def generate_launch_description():
         ),
         Node(
             package="lidar_processing",
+            name="interceptor",
+            executable="interceptor.py"
+        ),
+        Node(
+            package="lidar_processing",
             name="bounding_box",
             executable="bounding_box"
         ),
@@ -23,5 +28,10 @@ def generate_launch_description():
             name='ClusteringNode',
             executable='clustering.py'
         ),
+        Node(
+            package="lidar_processing",
+            name="GlobalRacelinePublisher",
+            executable="global_raceline_publisher.py"
+        )
     ])
 
