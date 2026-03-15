@@ -27,6 +27,7 @@ class IMMEvaluator(Node):
 
         self._n_evaluated = 0
 
+
         self.create_subscription(Path,     '/imm_path',         self.path_cb, 10)
         self.create_subscription(Odometry, '/opp_racecar/odom', self.odom_cb, 10)
 
@@ -45,14 +46,14 @@ class IMMEvaluator(Node):
             if pts.shape[0] == 0:
                 return
             self._pending.append({
-                'time': _stamp_sec(msg.header.stamp),
+                'time': msg.header.stamp.sec + msg.header.stamp.nanosec/(1e9),
                 'pred': pts,
             })
 
     # adding odom/ real car path ot the bufer
     def odom_cb(self, msg: Odometry):
         self._odom.append({
-            'time': _stamp_sec(msg.header.stamp),
+            'time': msg.header.stamp.sec + msg.header.stamp.nanosec/(1e9),
             'pos':  np.array([msg.pose.pose.position.x,
                                 msg.pose.pose.position.y]),
         })
@@ -68,7 +69,7 @@ class IMMEvaluator(Node):
     def evaluate(self):
             if not self._pending or not self._odom:
                 return
-
+            
             odom_times = np.array([o['time'] for o in self._odom])
             latest_t   = odom_times[-1]
 

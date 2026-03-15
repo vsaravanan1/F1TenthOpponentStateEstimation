@@ -43,7 +43,7 @@ class IMMNode(Node):
         
     
         self.imm_model = IMMEstimator(filters, mu, trans)
-        self.testing = True
+        self.testing = False
     
         if not self.testing:
             self.state_sub = self.create_subscription(
@@ -406,7 +406,7 @@ class IMMNode(Node):
             
         self.traj_pub.publish(path_msg)
 
-    def publish_model_stats(self):
+    def publish_model_freqs(self):
         filter_names = ["cv", "ca", "ct"]
         chosen_filter_idx = np.argmax(self.imm_model.mu)
         self.filter_counts[chosen_filter_idx] += 1
