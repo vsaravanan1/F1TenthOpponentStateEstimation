@@ -33,7 +33,7 @@ class bounding_box : public rclcpp::Node {
         std::unique_ptr<tf2_ros::TransformListener> tf_listener;
         
 
-        // center values fo bounding box created from point cloud
+        // center values of bounding box created from point cloud
         float x_curr_ctr = 0.0;
         float y_curr_ctr = 0.0;
         float z_curr_ctr = 0.0;

@@ -28,7 +28,7 @@ class IMM_RMSE_EVAL(Node):
         self.odom_buf_max_len : int =  50
 
         # path callback constants
-        self.path_step_dt = Duration(seconds = 0, nanoseconds = 150e6)
+        self.path_step_dt = Duration(seconds = 0, nanoseconds = 50e6)
         self.path_length = 15
         self.pending_paths : list[list] = []
         

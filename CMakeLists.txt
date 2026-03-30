@@ -92,6 +92,7 @@ install(PROGRAMS
   scripts/global_raceline_publisher.py
   scripts/walls_gen.py
   scripts/rmse.py
+  scripts/clustering_rf.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

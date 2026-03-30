@@ -26,7 +26,7 @@ def generate_launch_description():
         Node(
             package="lidar_processing",
             name='ClusteringNode',
-            executable='clustering.py'
+            executable='clustering_rf.py'
         ),
         Node(
             package="lidar_processing",
