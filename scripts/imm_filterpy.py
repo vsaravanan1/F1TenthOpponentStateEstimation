@@ -6,7 +6,7 @@ from filterpy.kalman import KalmanFilter, IMMEstimator
 from std_msgs.msg import Float64MultiArray, String
 from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import PoseStamped, Pose
-from rclpy.time import Time
+from rclpy.time import Time, Duration
 import csv
 
 
@@ -15,7 +15,7 @@ class IMMNode(Node):
         super().__init__('imm_predictor')
         
         # Initial dt - will be updated dynamically in callback based on rate of received messages
-        self.dt = 0.05
+        self.dt = 0.050
         self.prev_deg = 0.00
         self.prev_w = 0.0
         self.prev_x = 0.0
@@ -25,6 +25,8 @@ class IMMNode(Node):
         self.filter_counts = np.zeros(3)
         self.num_callbacks = 0
         self.frequencies = np.empty(3, dtype=np.float64)
+        
+        self.num_timesteps = 3
 
         # Create the kalman filters
         # State vector: [x, vx, ax, y, vy, ay]
@@ -38,11 +40,12 @@ class IMMNode(Node):
 
         # Transition matrix between models
         trans = np.array([[0.98, 0.01, 0.01],   
-                          [0.01, 0.98, 0.01], 
+                          [0.15, 0.7, 0.15], 
                           [0.01, 0.01, 0.98]])
         
     
         self.imm_model = IMMEstimator(filters, mu, trans)
+        self.ego_odom_sub =  self.create_subscription(Odometry, '/ego_racecar/odom', self.ego_odom_cb, 10)
         self.testing = False
     
         if not self.testing:
@@ -55,9 +58,14 @@ class IMMNode(Node):
         self.wait_count = 0
         self.chosen_filter_pub = self.create_publisher(String, '/chosen_filter', 10)
 
-        self.last_publish_time = self.get_clock().now()
+        self.last_state_cb_time = self.get_clock().now()
         self.publish_interval = 0.005
-        
+        self.inactive_state_cb_timer = self.create_timer(0.050, self.inactive_state_cb, None, self.get_clock())
+
+    def inactive_state_cb(self):
+        if self.get_clock().now() - self.last_state_cb_time > Duration(0, 250e6):
+            
+
     def create_kf_cv(self, dt):
         kf = KalmanFilter(dim_x=6, dim_z=2) # Observe x, y
         # kf.F = np.array([
@@ -117,7 +125,7 @@ class IMMNode(Node):
         # kf.x = np.zeros(6)
         kf.R = np.eye(2) * 0.05
 
-        q_pos = 0.01
+        q_pos = 0.1
         q_vel = 0.3
         q_accel = 1.0
 
@@ -152,9 +160,6 @@ class IMMNode(Node):
             [1, 0, 0, 0, 0, 0],
             [0, 0, 0, 1, 0, 0]
         ])
-        # kf.R = np.eye(4) * 0.10
-        # kf.Q = np.eye(6) * 0.001
-        # kf.P *= 1.0
 
         q_pos = 0.01
         q_vel = 0.5
@@ -170,47 +175,13 @@ class IMMNode(Node):
         kf.x = np.zeros(6)
         return kf
 
+    def reset_filter_matrices(self):
+        self.imm_model.filters[0] = self.create_kf_cv(self.dt)
+        self.imm_model.filters[1] = self.create_kf_ca(self.dt)
+        self.imm_model.filters[2] = self.create_kf_ct(self.dt, w=0.5)
+
     def update_filter_matrices(self, dt, w):
         """Update state transition matrix F accordingly for each model"""
-        # CV Model
-        self.imm_model.filters[0].F = np.array([
-            [1, dt, 0,  0,  0,  0],
-            [0,  1, 0,  0,  0,  0],
-            [0,  0, 1,  0,  0,  0],
-            [0,  0, 0,  1, dt,  0],
-            [0,  0, 0,  0,  1,  0],
-            [0,  0, 0,  0,  0,  1],
-        ])
-        
-        
-        # CA Model
-        self.imm_model.filters[1].F = np.array(
-        [
-            [1, dt, 0.5 * dt**2, 0, 0, 0],
-            [0, 1, dt, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0],
-            [0, 0, 0, 1, dt, 0.5 * dt**2],
-            [0, 0, 0, 0, 1, dt],
-            [0, 0, 0, 0, 0, 1]
-        ])
-        
-
-
-        # deg = np.degrees(np.arctan2(vy, vx))
-        # w = np.radians((deg - self.prev_deg)/dt)
-        # w = np.clip(w, -0.3, 0.3)
-        # w = 0.35 * self.prev_w + 0.65 * w
-        # w = np.clip(w, -0.3, 0.3)
-        # self.prev_deg = deg
-        # self.prev_w = w
-        
-        # if deg > 90:
-        #     w = 0.5
-        # else:
-        #     w = -0.5
-
-        # 
-
         wdt = w * dt
         c = np.cos(wdt)
         s = np.sin(wdt)
@@ -234,13 +205,17 @@ class IMMNode(Node):
             ])
         self.imm_model.filters[2].F = f_ct
 
+        
+
     def state_callback(self, msg):
+        self.last_state_cb_time = self.get_clock().now()
         # msg: [dt_ms, x, y, vx, vy]
         raw_dt, x, y, vx, vy = msg.data
         dt = raw_dt / 1000.0 if raw_dt > 0 else 0.150
         # handle large lapses in data
-        if dt > 0.16:
-         return
+        if dt > 1.00:
+            self.reset_filter_matrices()
+            return
 
         if self.first_callback:
             self.first_callback = False
@@ -252,8 +227,8 @@ class IMMNode(Node):
             self.imm_model.x = self.imm_model.mu @ [f.x for f in self.imm_model.filters]
             return
 
-        cross_product = np.cross(np.array([self.imm_model.x[1], self.imm_model.x[4], 0]), np.array([self.imm_model.x[2], self.imm_model.x[5], 0]))
 
+        cross_product = np.cross(np.array([self.imm_model.x[1], self.imm_model.x[4], 0]), np.array([self.imm_model.x[2], self.imm_model.x[5], 0]))
         vel_mag = np.sqrt(self.imm_model.x[1]**2 + self.imm_model.x[4]**2)
         accel_mag = np.sqrt(self.imm_model.x[2]**2 + self.imm_model.x[5]**2)
 
@@ -292,7 +267,7 @@ class IMMNode(Node):
 
 
         # reducing prediction steps to less lag 
-        pred = self.generate_prediction(steps=15, dt=(dt/10))
+        pred = self.generate_prediction(steps=10, dt=(dt/10))
         min_x = np.min(pred[:,0])
         max_x = np.max(pred[:,0])
         min_y = np.min(pred[:,1])
