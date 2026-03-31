@@ -36,7 +36,6 @@ class ClusteringNode(Node):
         
     def cluster_callback(self, msg):
         """Uses the DBSCAN algorithm to cluster point-cloud data and a random forest model to identify which cluster belongs to the opponent vehicle"""
-
         points = np.array(list(pc2.read_points(msg, field_names = ("x", "y", "z"), skip_nans=True)))
         clustering = DBSCAN(eps=0.15, min_samples=10).fit(points)
         labels = clustering.labels_
@@ -103,7 +102,7 @@ class ClusteringNode(Node):
             y = df['car_cluster']
             # print(X)
             # print(y)
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3, random_state=42, stratify=y, shuffle=True)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state=42, stratify=y, shuffle=True)
             X_train, X_test, y_train, y_test = X_train.reset_index(drop=True), X_test.reset_index(drop=True), y_train.reset_index(drop=True), y_test.reset_index(drop=True)
             # print(X_train, X_test, y_train, y_test, sep='\n')
             # print(X_train)

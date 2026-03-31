@@ -8,6 +8,7 @@ from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import PoseStamped, Pose
 from rclpy.time import Time, Duration
 import csv
+from copy import copy, deepcopy
 
 
 class IMMNode(Node):
@@ -25,7 +26,8 @@ class IMMNode(Node):
         self.filter_counts = np.zeros(3)
         self.num_callbacks = 0
         self.frequencies = np.empty(3, dtype=np.float64)
-        
+        self.global_raceline_poses = np.zeros((1000, 2))
+        self.raceline_updated = False
         self.num_timesteps = 3
 
         # Create the kalman filters
@@ -40,12 +42,12 @@ class IMMNode(Node):
 
         # Transition matrix between models
         trans = np.array([[0.98, 0.01, 0.01],   
-                          [0.15, 0.7, 0.15], 
+                          [0.25, 0.5, 0.25], 
                           [0.01, 0.01, 0.98]])
         
     
         self.imm_model = IMMEstimator(filters, mu, trans)
-        self.ego_odom_sub =  self.create_subscription(Odometry, '/ego_racecar/odom', self.ego_odom_cb, 10)
+        self.imm_model_inactive =  None
         self.testing = False
     
         if not self.testing:
@@ -61,21 +63,75 @@ class IMMNode(Node):
         self.last_state_cb_time = self.get_clock().now()
         self.publish_interval = 0.005
         self.inactive_state_cb_timer = self.create_timer(0.050, self.inactive_state_cb, None, self.get_clock())
+        self.raceline_sub = self.create_subscription(Path, '/global_raceline', self.global_raceline_cb, 10)
+
 
     def inactive_state_cb(self):
-        if self.get_clock().now() - self.last_state_cb_time > Duration(0, 250e6):
+        if self.get_clock().now() - self.last_state_cb_time > Duration(seconds=0, nanoseconds=150e6):
+            self.imm_model.predict()
+            # [x, vx, ax, y, vy, ay]
+            # Clamp acceleration to reasonable bounds just in case the traj gen goes off map
+            self.imm_model.x[2] = np.clip(self.imm_model.x[2], -3.0, 3.0)  # ax
+            self.imm_model.x[5] = np.clip(self.imm_model.x[5], -3.0, 3.0)  # ay
             
+            # add decay for acceleration
+            accel_decay = 0.8
+            self.imm_model.x[2] *= accel_decay
+            self.imm_model.x[5] *= accel_decay
+            
+            # Also clamp velocity if needed
+            self.imm_model.x[1] = np.clip(self.imm_model.x[1], -10.0, 10.0)  # vx
+            self.imm_model.x[4] = np.clip(self.imm_model.x[4], -10.0, 10.0)  # vy
+            
+            # add decay for velocity
+            velocity_decay = 0.98
+            self.imm_model.x[1] *= velocity_decay
+            self.imm_model.x[4] *= velocity_decay
+
+            if self.raceline_updated:
+                z_invisible = [self.imm_model.x[0], self.imm_model.x[3]]
+                closest_idx, closest_rl_point = self.find_closest_point_raceline(z_invisible)
+
+                original_R = [f.R.copy() for f in self.imm_model.filters]
+            
+                for f in self.imm_model.filters:
+                    f.R = np.eye(2) * 5.0
+
+                self.imm_model.update(np.array(closest_rl_point))
+                for i, f in enumerate(self.imm_model.filters):
+                    f.R = original_R[i]
+
+            # reducing prediction steps to less lag 
+            pred = self.generate_prediction(steps=10, dt=(self.dt/10))
+            min_x = np.min(pred[:,0])
+            max_x = np.max(pred[:,0])
+            min_y = np.min(pred[:,1])
+            max_y = np.max(pred[:,1])
+
+            self.publish_path(pred.tolist())
+            self.get_logger().info("Published!")
+                
+    def global_raceline_cb(self, msg : Path):
+        if not self.raceline_updated:
+            for i, pose in enumerate(msg.poses):
+                self.global_raceline_poses[i, 0] = pose.pose.position.x
+                self.global_raceline_poses[i, 1] = pose.pose.position.y
+            self.raceline_updated = True
+    
+    def find_closest_point_raceline(self, z):
+        min_idx = 0
+        min_dist_sq = (z[0] - self.global_raceline_poses[0,0])**2 + (z[1] - self.global_raceline_poses[0,1])**2
+        for i in range(len(self.global_raceline_poses)):
+            dist_sq = (z[0] - self.global_raceline_poses[i,0])**2 + (z[1] - self.global_raceline_poses[i,1])**2
+            if dist_sq < min_dist_sq:
+                min_dist_sq = dist_sq
+                min_idx = i
+        return min_idx, self.global_raceline_poses[min_idx]
+        
 
     def create_kf_cv(self, dt):
         kf = KalmanFilter(dim_x=6, dim_z=2) # Observe x, y
-        # kf.F = np.array([
-        #         [1, dt, 0, 0, 0, 0],
-        #         [0, 1, 0, 0, 0, 0],
-        #         [0, 0, 0, 0, 0, 0],
-        #         [0, 0, 1, dt, 0, 0],
-        #         [0, 0, 0, 1, 0, 0], 
-        #         [0, 0, 0, 0, 0, 0] 
-        #     ])
+    
         kf.F = np.array([ # change to use vy instead of acceleraton
             [1, dt, 0,  0,  0,  0],
             [0,  1, 0,  0,  0,  0], 
@@ -91,8 +147,8 @@ class IMMNode(Node):
         
         kf.R = np.eye(2) * 0.05
 
-        q_pos = 0.01
-        q_vel = 0.2
+        q_pos = 0.5
+        q_vel = 1.0
         q_accel = 1.0
 
         kf.Q = np.diag([
@@ -125,9 +181,9 @@ class IMMNode(Node):
         # kf.x = np.zeros(6)
         kf.R = np.eye(2) * 0.05
 
-        q_pos = 0.1
-        q_vel = 0.3
-        q_accel = 1.0
+        q_pos = 1.0
+        q_vel = 3.0
+        q_accel = 5.0
 
         kf.Q = np.diag([
             q_pos, q_vel, q_accel,
@@ -161,8 +217,8 @@ class IMMNode(Node):
             [0, 0, 0, 1, 0, 0]
         ])
 
-        q_pos = 0.01
-        q_vel = 0.5
+        q_pos = 0.5
+        q_vel = 1.0
         q_accel = 1.0
 
         kf.Q = np.diag([
@@ -187,8 +243,7 @@ class IMMNode(Node):
         s = np.sin(wdt)
 
         if abs(w) < 0.001:
-            # if w is too small, use CV matrix
-            # small angle approximation
+            # if w is too small, use small angle approximation
             sw = dt 
             lhs = 1/2 * dt**2
         else: 
@@ -205,13 +260,11 @@ class IMMNode(Node):
             ])
         self.imm_model.filters[2].F = f_ct
 
-        
-
     def state_callback(self, msg):
         self.last_state_cb_time = self.get_clock().now()
         # msg: [dt_ms, x, y, vx, vy]
         raw_dt, x, y, vx, vy = msg.data
-        dt = raw_dt / 1000.0 if raw_dt > 0 else 0.150
+        dt = raw_dt / 1000.0 if raw_dt > 0 else self.dt
         # handle large lapses in data
         if dt > 1.00:
             self.reset_filter_matrices()
@@ -261,6 +314,12 @@ class IMMNode(Node):
         self.imm_model.x[2] = np.clip(self.imm_model.x[2], -3.0, 3.0)  # ax
         self.imm_model.x[5] = np.clip(self.imm_model.x[5], -3.0, 3.0)  # ay
         
+        accel_decay = 0.98
+        if self.imm_model.x[2] >= 2.0:
+            self.imm_model.x[2] *= accel_decay
+        if self.imm_model.x[5] >= 2.0:
+            self.imm_model.x[5] *= accel_decay
+
         # Also clamp velocity if needed
         self.imm_model.x[1] = np.clip(self.imm_model.x[1], -10.0, 10.0)  # vx
         self.imm_model.x[4] = np.clip(self.imm_model.x[4], -10.0, 10.0)  # vy
@@ -286,9 +345,9 @@ class IMMNode(Node):
 
         self.publish_path(pred.tolist())
         self.get_logger().info("Published!")
-        self.prev_x = x
-        self.prev_y = y
-        self.wait_count = 0
+        # self.prev_x = x
+        # self.prev_y = y
+        # self.wait_count = 0
 
     def odom_callback(self, msg : Odometry):
         self.get_logger().info("Publish")
@@ -356,11 +415,13 @@ class IMMNode(Node):
         filter_info = String()
         filter_info.data = chosen_filter
         self.chosen_filter_pub.publish(filter_info)
-        F_best = self.imm_model.filters[best_idx].F
-        
+        F_avg = np.zeros_like(self.imm_model.filters[0].F)
+        for i in range(3):
+            F_avg += self.imm_model.mu[i] * self.imm_model.filters[i].F
+
         prediction = np.zeros((steps, 2))
         for i in range(steps):
-            curr_state = np.dot(F_best, curr_state)
+            curr_state = np.dot(F_avg, curr_state)
             prediction[i] = [curr_state[0], curr_state[3]]
             
         return np.array(prediction)
