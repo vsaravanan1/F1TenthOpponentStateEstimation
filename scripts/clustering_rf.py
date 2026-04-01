@@ -111,7 +111,7 @@ class ClusteringNode(Node):
             X_test_std = scaler.transform(X_test)
             # print(X_train_std)
 
-            clf = RandomForestClassifier(100, max_depth = 10, max_features='sqrt', min_samples_leaf=2, class_weight='balanced')
+            clf = RandomForestClassifier(200, max_depth = 20, max_features='sqrt', min_samples_leaf=1, class_weight='balanced')
             clf.fit(X_train_std, y_train)
             self.get_logger().info(f"Score: {clf.score(X_test_std, y_test)}")
             return clf, scaler
