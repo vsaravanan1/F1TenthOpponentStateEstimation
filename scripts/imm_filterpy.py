@@ -67,7 +67,7 @@ class IMMNode(Node):
 
 
     def inactive_state_cb(self):
-        if self.get_clock().now() - self.last_state_cb_time > Duration(seconds=0, nanoseconds=150e6):
+        if self.get_clock().now() - self.last_state_cb_time >= Duration(seconds=0, nanoseconds=100e6):
             self.imm_model.predict()
             # [x, vx, ax, y, vy, ay]
             # Clamp acceleration to reasonable bounds just in case the traj gen goes off map
@@ -75,7 +75,7 @@ class IMMNode(Node):
             self.imm_model.x[5] = np.clip(self.imm_model.x[5], -3.0, 3.0)  # ay
             
             # add decay for acceleration
-            accel_decay = 0.8
+            accel_decay = 0.9
             self.imm_model.x[2] *= accel_decay
             self.imm_model.x[5] *= accel_decay
             
@@ -83,10 +83,6 @@ class IMMNode(Node):
             self.imm_model.x[1] = np.clip(self.imm_model.x[1], -10.0, 10.0)  # vx
             self.imm_model.x[4] = np.clip(self.imm_model.x[4], -10.0, 10.0)  # vy
             
-            # add decay for velocity
-            velocity_decay = 0.98
-            self.imm_model.x[1] *= velocity_decay
-            self.imm_model.x[4] *= velocity_decay
 
             if self.raceline_updated:
                 z_invisible = [self.imm_model.x[0], self.imm_model.x[3]]
@@ -102,7 +98,7 @@ class IMMNode(Node):
                     f.R = original_R[i]
 
             # reducing prediction steps to less lag 
-            pred = self.generate_prediction(steps=10, dt=(self.dt/10))
+            pred = self.generate_prediction(steps=20, dt=(self.dt/10))
             min_x = np.min(pred[:,0])
             max_x = np.max(pred[:,0])
             min_y = np.min(pred[:,1])
@@ -266,9 +262,9 @@ class IMMNode(Node):
         raw_dt, x, y, vx, vy = msg.data
         dt = raw_dt / 1000.0 if raw_dt > 0 else self.dt
         # handle large lapses in data
-        if dt > 1.00:
-            self.reset_filter_matrices()
-            return
+        # if dt > 1.00:
+        #     self.reset_filter_matrices()
+        #     return
 
         if self.first_callback:
             self.first_callback = False
@@ -315,9 +311,8 @@ class IMMNode(Node):
         self.imm_model.x[5] = np.clip(self.imm_model.x[5], -3.0, 3.0)  # ay
         
         accel_decay = 0.98
-        if self.imm_model.x[2] >= 2.0:
+        if self.imm_model.x[2]**2 + self.imm_model.x[5]**2 > (2.25**2):
             self.imm_model.x[2] *= accel_decay
-        if self.imm_model.x[5] >= 2.0:
             self.imm_model.x[5] *= accel_decay
 
         # Also clamp velocity if needed
@@ -326,11 +321,11 @@ class IMMNode(Node):
 
 
         # reducing prediction steps to less lag 
-        pred = self.generate_prediction(steps=10, dt=(dt/10))
-        min_x = np.min(pred[:,0])
-        max_x = np.max(pred[:,0])
-        min_y = np.min(pred[:,1])
-        max_y = np.max(pred[:,1])
+        pred = self.generate_prediction(steps=20, dt=(dt/10))
+        # min_x = np.min(pred[:,0])
+        # max_x = np.max(pred[:,0])
+        # min_y = np.min(pred[:,1])
+        # max_y = np.max(pred[:,1])
         # distance_squared = (max_x - min_x)*(max_x - min_x) + (max_y - min_y)*(max_y-min_y)
 
         # filter out trajectories that are too long / go off the map (likely formed due to noisy data or incorrect identification of opponent cluster)
