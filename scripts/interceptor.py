@@ -1,228 +1,269 @@
 #!/usr/bin/env python3
+import math
+import numpy as np
 import rclpy
 from rclpy.node import Node
-import numpy as np
-from scipy.interpolate import splprep, splev
 from scipy.optimize import minimize_scalar
-from nav_msgs.msg import Path
-from std_msgs.msg import Float64MultiArray
-from nav_msgs.msg import Odometry
+from scipy.special import expit
+from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import LaserScan
 from visualization_msgs.msg import Marker
-import math
 
-"""
-This class :
-    1. Find the interceptor point (Need to superproject by adding the legnth of the ego vehicle)
-    2. Scipy's paramentric cubic spline is used to make a path for ego vehicle
-    3. Interceptor spline is the cubic spile 
-"""
 
 class IMMInterceptorNode(Node):
+    '''changed to sigmoid function and added offset from main trajectory'''
+
     def __init__(self):
         super().__init__('imm_interceptor')
 
-        # need to subscribe to IMM predicted path 
         self.imm_path_sub = self.create_subscription(Path, '/imm_path', self.imm_path_callback, 10)
-
-        # sub to ego vehicle state(need to chage these topcis for car softwarer)
         self.ego_state_sub = self.create_subscription(Odometry, '/ego_racecar/odom', self.ego_state_callback, 10)
+        self.lidar_scan_sub = self.create_subscription(LaserScan, '/scan', self.lidar_scan_callback, 10)
 
         self.interceptor_pub = self.create_publisher(Path, '/interceptor_spline', 10)
-
         self.intercept_marker_pub = self.create_publisher(Marker, '/intercept_point_marker', 10)
-
-        self.lidar_scan_sub = self.create_subscription(LaserScan, '/scan', self.lidar_scan_callback, 10)
 
         self.ego_x = 0.0
         self.ego_y = 0.0
         self.ego_vx = 0.0
         self.ego_vy = 0.0
-        self.max_ego_speed = 5.0
-        self.max_ego_accel = 3.0
+        self.ego_yaw = 0.0
+
         self.length_of_the_car = 0.5
+        self.car_width = 0.30
+        self.opp_half_width = 0.20
+        self.clearance_margin = 0.35
+        self.min_lateral_offset = 0.75
+
+        self.dt = 0.05
+        self.path_resolution = 45
+
         self.opp_path = None
 
-        self.dt = 0.05  # Time step between prediction points
+        self.scan_ranges = np.array([])
+        self.scan_angle_min = 0.0
+        self.scan_angle_inc = 0.0
+        self.max_scan_range = 4.0
 
-        self.spline_resolution = 20 # num of pts for spline, make bigger for tighter curves and more accurate splines
-        
-        self.distances_by_angle = np.zeros(1080)
-
-        self.get_logger().info("-----------started Interceptor node----------")
-
-    def lidar_scan_callback(self, msg):
-        self.processed_lidar = []
+    def lidar_scan_callback(self, msg: LaserScan):
+        processed = []
         rmin = max(0.0, msg.range_min)
-        rmax = msg.range_max if math.isfinite(msg.range_max) else 4.0
-        cap = min(4.0, rmax)
+        rmax = msg.range_max if math.isfinite(msg.range_max) else self.max_scan_range
+        cap = min(self.max_scan_range, rmax)
         for r in msg.ranges:
             if not math.isfinite(r) or r <= rmin:
-                self.processed_lidar.append(0.0)
+                processed.append(0.0)
             else:
-                self.processed_lidar.append(min(float(r), cap))
-        self.distances_by_angle = np.array(self.processed_lidar)
+                processed.append(min(float(r), cap))
+        self.scan_ranges = np.array(processed, dtype=np.float64)
+        self.scan_angle_min = msg.angle_min
+        self.scan_angle_inc = msg.angle_increment
 
-
-
-    def ego_state_callback(self, msg):
-
-        # gets the ego vehicle state
-        
+    def ego_state_callback(self, msg: Odometry):
         self.ego_x = msg.pose.pose.position.x
         self.ego_y = msg.pose.pose.position.y
         self.ego_vx = msg.twist.twist.linear.x
         self.ego_vy = msg.twist.twist.linear.y
 
-        self.get_logger().info(f"Ego updated: ({self.ego_x:.2f}, {self.ego_y:.2f})")
+        q = msg.pose.pose.orientation
+        self.ego_yaw = self.quat_to_yaw(q.x, q.y, q.z, q.w)
 
-
-    def imm_path_callback(self, path_msg):
-        # here get the predicted path of oppornenet vehcile 
-        print("GOT IMM PATH FOR INTERCEPTOR")
-        if( len(path_msg.poses) == 0):
+    def imm_path_callback(self, path_msg: Path):
+        if len(path_msg.poses) == 0:
             return
-        
+
         opponent_trajectory = np.array([
-            [pose.pose.position.x, pose.pose.position.y] 
+            [pose.pose.position.x, pose.pose.position.y]
             for pose in path_msg.poses
-        ]) # In a numpy array
+        ], dtype=np.float64)
 
         self.opp_path = opponent_trajectory
 
-        # Find the best intercept point
+        pass_target, side, index = self.find_optimal_pass_target(opponent_trajectory)
+        if pass_target is None:
+            self.get_logger().warn("[interceptor.py debug] No safe pass target found")
+            return
 
-        intercept_point, idx = self.find_optimal_intercept(opponent_trajectory)
+        self.publish_intercept_marker(pass_target)
+        self.gen_pub_sigmoid_path(pass_target, index, side)
 
-        if intercept_point is not None:
-            self.get_logger().info("[interceptor.py debug] Publishing intercept marker")
-            self.publish_intercept_marker(intercept_point)
-            self.gen_pub_spline(intercept_point)
+    def find_optimal_pass_target(self, opponent_trajectory: np.ndarray):
+        ego_pos = np.array([self.ego_x, self.ego_y], dtype=np.float64)
+        ego_speed = max(0.5, np.hypot(self.ego_vx, self.ego_vy))
 
-        else:
-            self.get_logger().warn("[interceptor.py debug] No intercept point found - no path generater")
+        def candidate_cost(t_index):
+            index = int(np.clip(t_index, 2, len(opponent_trajectory) - 3))
+            left_pt, right_pt, tangent = self.build_side_candidates(opponent_trajectory, index)
 
-        # generate interceptor spline
+            opp_time = index * self.dt
+            left_time = np.linalg.norm(left_pt - ego_pos) / ego_speed
+            right_time = np.linalg.norm(right_pt - ego_pos) / ego_speed
 
-    def find_optimal_intercept(self, opponent_trajectory):
-        
-        ego_pos = np.array([self.ego_x, self.ego_y])
-        ego_speed = np.sqrt(self.ego_vx**2 + self.ego_vy**2) 
+            left_clear = self.estimate_side_clearance("left")
+            right_clear = self.estimate_side_clearance("right")
 
+            left_forward = np.dot(left_pt - ego_pos, tangent)
+            right_forward = np.dot(right_pt - ego_pos, tangent)
 
-        def time_difference(t_idx):
-            """Cost function: difference between arrival times"""
-            idx = int(np.clip(t_idx, 0, len(opponent_trajectory) - 1))
-            opp_pos = opponent_trajectory[idx]
-            
-            distance = np.linalg.norm((opp_pos + self.length_of_the_car) - ego_pos)
-            
-            # Time for ego to reach this point
-            ego_time = distance / ego_speed
-            
-            # Time for opponent to reach this point
-            opp_time = idx * self.dt
-            
-            time_diff = ego_time - opp_time
-            # return time_diff**2 if time_diff > 0 else abs(time_diff) * 0.1
+            left_cost = (left_time - opp_time) ** 2 - 0.35 * left_clear - 0.15 * left_forward
+            right_cost = (right_time - opp_time) ** 2 - 0.35 * right_clear - 0.15 * right_forward
+            return min(left_cost, right_cost)
 
-            # less harsh pentaly if the diffrence is large
-            if time_diff > 0:
-                return time_diff * 2.0
-            else:
-                return abs(time_diff) * 0.1
-        
-        # Optimize to find best intercept index
         result = minimize_scalar(
-            time_difference,
-            bounds=(0, len(opponent_trajectory) - 1),
+            candidate_cost,
+            bounds=(2, len(opponent_trajectory) - 3),
             method='bounded'
         )
-        
-        best_idx = int(result.x)
-        
-        # Check if intercept is feasible
-        # if result.fun > 10.0:  # If time difference is too large
-        #     return None, -1
-        
-        intercept_point = opponent_trajectory[best_idx]
-        
-        self.get_logger().info(
-            f"Intercept point found at index {best_idx}/{len(opponent_trajectory)-1}, "
-            f"position: ({intercept_point[0]:.2f}, {intercept_point[1]:.2f})"
+
+        best_index = int(np.clip(result.x, 2, len(opponent_trajectory) - 3))
+        left_pt, right_pt, tangent = self.build_side_candidates(opponent_trajectory, best_index)
+        left_clear = self.estimate_side_clearance("left")
+        right_clear = self.estimate_side_clearance("right")
+
+        left_score = self.score_candidate(left_pt, tangent, left_clear)
+        right_score = self.score_candidate(right_pt, tangent, right_clear)
+
+        if left_score >= right_score:
+            chosen_side = "left"
+            chosen_pt = left_pt
+        else:
+            chosen_side = "right"
+            chosen_pt = right_pt
+
+        return chosen_pt, chosen_side, best_index
+
+    def build_side_candidates(self, opponent_trajectory: np.ndarray, index: int):
+        prev_pt = opponent_trajectory[index - 2]
+        curr_pt = opponent_trajectory[index]
+        next_pt = opponent_trajectory[index + 2]
+
+        tangent = next_pt - prev_pt
+        norm_tan = np.linalg.norm(tangent)
+        tangent = tangent / norm_tan
+
+        normal_left = np.array([-tangent[1], tangent[0]], dtype=np.float64)
+        normal_right = -normal_left
+
+        lateral_offset = max(
+            self.min_lateral_offset,
+            0.5 * self.car_width + self.opp_half_width + self.clearance_margin
         )
-        
-        return intercept_point, best_idx
 
-    def get_waypoints(self, intercept_point):
-        ego_pos = np.array([self.ego_x, self.ego_y])
-        heading_vect = np.array([self.opp_path[4, 0] - self.opp_path[0, 0], self.opp_path[4, 1] - self.opp_path[0, 1]])
-        heading_vect = heading_vect/np.abs(heading_vect)
-        heading_angle = np.rad2deg(np.arctan2(heading_vect[1], heading_vect[0]))
-        possible_targets = np.array([[np.cos(np.deg2rad(heading_angle+90)), np.sin(np.deg2rad(heading_angle+90))],
-                                     [np.cos(np.deg2rad(heading_angle-90)), np.sin(np.deg2rad(heading_angle-90))]])
-        possible_waypoints = [intercept_point + possible_targets[0]*0.5, intercept_point + possible_targets[1]*0.5]
-        
+        forward_lead = max(0.3, self.length_of_the_car)
+        base_anchor = curr_pt + forward_lead * tangent
 
-        
+        left_pt = base_anchor + lateral_offset * normal_left
+        right_pt = base_anchor + lateral_offset * normal_right
+        return left_pt, right_pt, tangent
 
-    def gen_pub_spline(self, intercept_point):
+    def score_candidate(self, candidate: np.ndarray, tangent: np.ndarray, side_clearance: float):
+        ego_pos = np.array([self.ego_x, self.ego_y], dtype=np.float64)
+        ego_speed = max(0.5, np.hypot(self.ego_vx, self.ego_vy))
 
-        ego_pos = np.array([self.ego_x, self.ego_y])
-        print(ego_pos)
+        dist = np.linalg.norm(candidate - ego_pos)
+        travel_time = dist / ego_speed
+        forward_gain = np.dot(candidate - ego_pos, tangent)
+        return 0.6 * side_clearance + 0.2 * forward_gain - 0.2 * travel_time
 
-        # TO make a spline, make waypoints 
-        mid_point = (ego_pos + intercept_point) / 2.0
+    def estimate_side_clearance(self, side: str) -> float:
+        if self.scan_ranges.size == 0:
+            return 0.0
 
-        control_points = np.array([ego_pos, mid_point, intercept_point])
+        if side == "left":
+            amin = math.radians(10.0)
+            amax = math.radians(70.0)
+        else:
+            amin = math.radians(-70.0)
+            amax = math.radians(-10.0)
 
-        #need k +1 points for cubic spline
+        values = []
+        for i, r in enumerate(self.scan_ranges):
+            if r <= 0.0:
+                continue
+            ang = self.scan_angle_min + i * self.scan_angle_inc
+            if amin <= ang <= amax:
+                values.append(r)
 
-        if len(control_points) < 4:
-            quarter_point = 0.75 * ego_pos + 0.25 * intercept_point
-            three_quarter_point = 0.25 * ego_pos + 0.75 * intercept_point
-            control_points = np.array([ego_pos, quarter_point, three_quarter_point, intercept_point])
-        
-        x = control_points[:, 0]
-        y = control_points[:, 1]
+        if not values:
+            return 0.0
+        return float(min(values))
 
-        try:
-            
-            # spline will pass through all points - Using SciPy
-            tck, u = splprep([x, y], s=0, k=3)
-            
-            # Generate points along the spline
-            u_new = np.linspace(0, 1, self.spline_resolution)
-            spline_x, spline_y = splev(u_new, tck)
-            
-            # Create Path message - To publihs itnerceptor spline 
-            path_msg = Path()
-            path_msg.header.frame_id = "map"
-            path_msg.header.stamp = self.get_clock().now().to_msg()
-            
-            for i in range(len(spline_x)):
-                pose = PoseStamped()
-                pose.header.frame_id = "map"
-                pose.header.stamp = path_msg.header.stamp
-                pose.pose.position.x = float(spline_x[i])
-                pose.pose.position.y = float(spline_y[i])
-                pose.pose.position.z = 0.0
-                pose.pose.orientation.w = 1.0
-                
-                path_msg.poses.append(pose)
-            
-            # Publish the spline path
-            self.interceptor_pub.publish(path_msg)
-            self.get_logger().info(f"Published interceptor spline with {len(path_msg.poses)} points")
-            
-        except Exception as e:
-            self.get_logger().error(f"cannot generate spline: {str(e)}")
+    def gen_pub_sigmoid_path(self, pass_target: np.ndarray, target_index: int, side: str):
+        ego_pos = np.array([self.ego_x, self.ego_y], dtype=np.float64)
 
+        if self.opp_path is None or len(self.opp_path) < 5:
+            return
 
-    def publish_intercept_marker(self, intercept_point):
+        prev_pt = self.opp_path[max(0, target_index - 2)]
+        next_pt = self.opp_path[min(len(self.opp_path) - 1, target_index + 2)]
+        tangent = next_pt - prev_pt
+        tangent_norm = np.linalg.norm(tangent)
+        if tangent_norm < 1e-6:
+            tangent = np.array([math.cos(self.ego_yaw), math.sin(self.ego_yaw)], dtype=np.float64)
+        else:
+            tangent = tangent / tangent_norm
 
-        """Publish a visualization marker for the intercept point"""
+        if side == "left":
+            normal = np.array([-tangent[1], tangent[0]], dtype=np.float64)
+        else:
+            normal = np.array([tangent[1], -tangent[0]], dtype=np.float64)
+
+        lateral_offset = max(
+            self.min_lateral_offset,
+            0.5 * self.car_width + self.opp_half_width + self.clearance_margin
+        )
+
+        opp_anchor = self.opp_path[target_index]
+        ahead_point = opp_anchor + 1.3 * tangent + lateral_offset * normal
+
+        # local coordinates in frame aligned with pass direction
+        delta_end = ahead_point - ego_pos
+        dlong = max(1.0, np.dot(delta_end, tangent))
+        dlat = np.dot(delta_end, normal)
+
+        if abs(dlat) < 1e-3:
+            dlat = lateral_offset if side == "left" else -lateral_offset
+
+        # paper-inspired sigmoid parameters of the research paper found 
+        # center shifted slightly forward so lane change starts after a short straight segment
+        center = 0.45 * dlong
+        sharpness = 10.0 / dlong
+
+        x_samples = np.linspace(0.0, dlong, self.path_resolution)
+        raw = expit(sharpness * (x_samples - center))
+
+        # normalize so path starts exactly at 0 and ends exactly at dlat
+        raw0 = expit(sharpness * (0.0 - center))
+        raw1 = expit(sharpness * (dlong - center))
+        denom = max(1e-6, raw1 - raw0)
+        y_samples = dlat * (raw - raw0) / denom
+
+        world_points = []
+        for x_local, y_local in zip(x_samples, y_samples):
+            pt = ego_pos + x_local * tangent + y_local * normal
+            world_points.append(pt)
+
+        path_msg = Path()
+        path_msg.header.frame_id = "map"
+        path_msg.header.stamp = self.get_clock().now().to_msg()
+
+        for pt in world_points:
+            pose = PoseStamped()
+            pose.header.frame_id = "map"
+            pose.header.stamp = path_msg.header.stamp
+            pose.pose.position.x = float(pt[0])
+            pose.pose.position.y = float(pt[1])
+            pose.pose.position.z = 0.0
+            pose.pose.orientation.w = 1.0
+            path_msg.poses.append(pose)
+
+        self.interceptor_pub.publish(path_msg)
+        self.get_logger().info(
+            f"Published sigmoid overtake path with {len(path_msg.poses)} points on {side} side"
+        )
+
+    def publish_intercept_marker(self, target_point: np.ndarray):
         marker = Marker()
         marker.header.frame_id = "map"
         marker.header.stamp = self.get_clock().now().to_msg()
@@ -230,27 +271,29 @@ class IMMInterceptorNode(Node):
         marker.id = 0
         marker.type = Marker.SPHERE
         marker.action = Marker.ADD
-        
-        # Position
-        marker.pose.position.x = float(intercept_point[0])
-        marker.pose.position.y = float(intercept_point[1])
-        marker.pose.position.z = 0.5  
+
+        marker.pose.position.x = float(target_point[0])
+        marker.pose.position.y = float(target_point[1])
+        marker.pose.position.z = 0.5
         marker.pose.orientation.w = 1.0
-        
-        # Size
-        marker.scale.x = 0.5
-        marker.scale.y = 0.5
-        marker.scale.z = 0.5
-        
-        # Color (bright green)
+
+        marker.scale.x = 0.35
+        marker.scale.y = 0.35
+        marker.scale.z = 0.35
+
         marker.color.r = 0.0
         marker.color.g = 1.0
         marker.color.b = 0.0
         marker.color.a = 1.0
-        
         marker.lifetime = rclpy.duration.Duration(seconds=0.5).to_msg()
-        
         self.intercept_marker_pub.publish(marker)
+
+    @staticmethod
+    def quat_to_yaw(x, y, z, w):
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        return math.atan2(siny_cosp, cosy_cosp)
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -259,15 +302,6 @@ def main(args=None):
     node.destroy_node()
     rclpy.shutdown()
 
+
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-        
-
-
-        
