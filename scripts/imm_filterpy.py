@@ -47,7 +47,9 @@ class IMMNode(Node):
         
     
         self.imm_model = IMMEstimator(filters, mu, trans)
-        self.imm_model_inactive =  None
+        self.imm_model_inactive =  False
+        self.imm_active_pub = self.create_publisher(String, '/imm_active', 10)
+        self.imm_active_cb_timer = self.create_timer(0.020, self.imm_active_cb, None, self.get_clock())
         self.testing = False
     
         if not self.testing:
@@ -65,9 +67,15 @@ class IMMNode(Node):
         self.inactive_state_cb_timer = self.create_timer(0.050, self.inactive_state_cb, None, self.get_clock())
         self.raceline_sub = self.create_subscription(Path, '/global_raceline', self.global_raceline_cb, 10)
 
+    def imm_active_cb(self):
+        if self.imm_model_inactive:
+            self.imm_active_pub.publish(String(data="False"))
+        else:
+            self.imm_active_pub.publish(String(data="True"))
 
     def inactive_state_cb(self):
         if self.get_clock().now() - self.last_state_cb_time >= Duration(seconds=0, nanoseconds=100e6):
+            self.imm_model_inactive = True
             self.imm_model.predict()
             # [x, vx, ax, y, vy, ay]
             # Clamp acceleration to reasonable bounds just in case the traj gen goes off map
@@ -258,6 +266,7 @@ class IMMNode(Node):
 
     def state_callback(self, msg):
         self.last_state_cb_time = self.get_clock().now()
+        self.imm_model_inactive = False
         # msg: [dt_ms, x, y, vx, vy]
         raw_dt, x, y, vx, vy = msg.data
         dt = raw_dt / 1000.0 if raw_dt > 0 else self.dt
