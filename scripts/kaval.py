@@ -86,6 +86,9 @@ from rclpy.node import Node
 from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import String
+
+
+from typing import List, Tuple
  
  
 
@@ -244,7 +247,7 @@ class KAVALDefensePlanner:
         """Reset all internal state — called on entry to DISARM and EXIT."""
         self.state = KAVALState.DISARM
         self.block_count = 0
-        self.active_spline: list[tuple] = []
+        self.active_spline: List[Tuple] = []
         self._exit_tick = 0      # counts ticks spent in EXIT before DISARM
  
     # ------------------------------------------------------------------
@@ -263,7 +266,7 @@ class KAVALDefensePlanner:
         raceline: np.ndarray,
         track_left: np.ndarray,
         track_right: np.ndarray,
-    ) -> tuple[list[tuple], str]:
+    ) -> Tuple[List[Tuple], str]:
         """
         Step the KAVAL automaton once.
  
@@ -278,6 +281,7 @@ class KAVALDefensePlanner:
         # Continuously reset internal state.
         # Transition to INIT the moment opponent enters tracking range.
         if self.state == KAVALState.DISARM:
+
             self.block_count = 0
             self.active_spline = []
             self._exit_tick = 0
@@ -373,7 +377,7 @@ class KAVALDefensePlanner:
         ego_pos, ego_heading, ego_speed,
         opp_pos, opp_heading, opp_speed,
         raceline, track_left, track_right,
-    ) -> list[tuple]:
+    ) -> List[Tuple]:
         """
         Build interceptor spline I = {i0, i1, i2} per Eq. 10.
  
@@ -402,8 +406,10 @@ class KAVALDefensePlanner:
         # Superprojection: K*LWB further ahead along opponent heading
         opp_super = opp_proj + self.K * self.LWB * opp_heading_unit
  
-        # Nearest track boundary to superprojected point
+        # Nearest track boundary to superprojected point- bascially left or right lane 
+
         nearest_left  = track_left[np.argmin(np.linalg.norm(track_left  - opp_super, axis=1))]
+        
         nearest_right = track_right[np.argmin(np.linalg.norm(track_right - opp_super, axis=1))]
         nearest_bound = closer_bound(opp_super, nearest_left, nearest_right)
  
@@ -434,7 +440,7 @@ class KAVALDefensePlanner:
  
     def _is_spline_feasible(
         self,
-        spline: list[tuple],
+        spline: List[Tuple],
         track_left: np.ndarray,
         track_right: np.ndarray,
         safety_margin: float = 0.15,
@@ -461,7 +467,7 @@ class KAVALDefensePlanner:
         self,
         ego_pos, ego_heading, ego_speed,
         opp_pos, raceline, n=40,
-    ) -> list[tuple]:
+    ) -> List[Tuple]:
         """
         FALLBACK: quintic blend to a point TRIG2 meters behind the
         opponent on the raceline (safe trailing gap after failed block).
@@ -491,7 +497,7 @@ class KAVALDefensePlanner:
     # Utility helpers
     # ------------------------------------------------------------------
  
-    def _raceline_lookahead(self, ego_pos, raceline, n=40) -> list[tuple]:
+    def _raceline_lookahead(self, ego_pos, raceline, n=40) -> List[Tuple]:
         """Return the next n raceline waypoints ahead of ego."""
         idx = int(np.argmin(np.linalg.norm(raceline - ego_pos, axis=1)))
         seg = raceline[idx: idx + n]
@@ -600,7 +606,7 @@ class DefensiveManeuverNode(Node):
             f"KAVAL state: {state_name} | waypoints: {len(waypoints)}"
         ) # for my debugging kill me 
  
-    def _publish_waypoints(self, waypoints: list[tuple], state_name: str):
+    def _publish_waypoints(self, waypoints: List[Tuple], state_name: str):
         path_msg = Path()
         path_msg.header.stamp    = self.get_clock().now().to_msg()
         path_msg.header.frame_id = 'map'
