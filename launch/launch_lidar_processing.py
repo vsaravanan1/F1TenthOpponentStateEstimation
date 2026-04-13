@@ -32,6 +32,11 @@ def generate_launch_description():
             package="lidar_processing",
             name="GlobalRacelinePublisher",
             executable="global_raceline_publisher.py"
+        ),
+        Node(
+            package="lidar_processing",
+            name="kaval",
+            executable="kaval.py"
         )
     ])
 

@@ -93,6 +93,7 @@ install(PROGRAMS
   scripts/walls_gen.py
   scripts/rmse.py
   scripts/clustering_rf.py
+  scripts/kaval.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
