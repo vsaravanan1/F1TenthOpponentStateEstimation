@@ -521,7 +521,7 @@ class DefensiveManeuverNode(Node):
         super().__init__('defensive_maneuver_node')
  
         self.sub_imm   = self.create_subscription(Path, '/imm_path',self._cb_imm, 10)
-        self.sub_odom  = self.create_subscription( Odometry, '/ego_odom', self._cb_odom,10)
+        self.sub_odom  = self.create_subscription( Odometry, '/ego_racecar/odom', self._cb_odom,10)
         self.sub_raceline = self.create_subscription(Path,'/global_raceline', self._cb_raceline, 10)
  
         self.pub_path  = self.create_publisher(Path,   '/defense_path',  10)
