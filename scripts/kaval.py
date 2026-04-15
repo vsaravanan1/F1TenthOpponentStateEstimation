@@ -205,7 +205,7 @@ def quintic_spline_waypoints(
     state Machine stuff from here 
 """
 class KAVALState(Enum):
-    DISARM   = auto()   # ego follows global raceline
+    DISARM   = auto()   # ego follows global raceline , when there is no, this is the state 
     INIT     = auto()   # Armed; defense trajectory computed and monitored
     BLOCK    = auto()   # following the defesne traj
     FALLBACK = auto()   # Defense failed; slow down, merge behind opponent
@@ -272,7 +272,7 @@ class KAVALDefensePlanner:
  
         Returns
         -------
-        waypoints : list of (x, y) — local reference path for MPC
+        waypoints : list of (x, y) — local reference path for Pure pursuite in our case / we use the ackerman steering messages 
         state_str : current KAVAL state name string
         """
         dist = float(np.linalg.norm(ego_pos - opp_pos))
@@ -412,7 +412,9 @@ class KAVALDefensePlanner:
         
         nearest_right = track_right[np.argmin(np.linalg.norm(track_right - opp_super, axis=1))]
         nearest_bound = closer_bound(opp_super, nearest_left, nearest_right)
- 
+
+        self.get_logger().info("Nearest bound: %s", str(nearest_bound))
+        
         # i1: shift superprojection toward wall by one car width
         i1 = lateral_offset(opp_super, nearest_bound, self.LWB)
  
@@ -428,6 +430,7 @@ class KAVALDefensePlanner:
         end_dir    = i2 - i1
         end_vel_xy = ego_speed * end_dir / (np.linalg.norm(end_dir) + 1e-6)
  
+        # retunr all waypoints for path
         return quintic_spline_waypoints(
             start_pos=i0,  start_vel_xy=ego_vel_xy, start_acc_xy=np.zeros(2),
             end_pos=i2,    end_vel_xy=end_vel_xy,   end_acc_xy=np.zeros(2),
