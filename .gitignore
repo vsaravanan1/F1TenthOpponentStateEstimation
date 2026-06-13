@@ -1,3 +1,4 @@
 build/
 install/
 rosbag2_2026_02_16-21_09_14/
+.vscode/
