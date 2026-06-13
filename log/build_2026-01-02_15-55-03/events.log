@@ -1,3 +1,0 @@
-[0.000000] (-) TimerEvent: {}
-[0.000329] (-) JobUnselected: {'identifier': 'lidar_processing'}
-[0.000971] (-) EventReactorShutdown: {}

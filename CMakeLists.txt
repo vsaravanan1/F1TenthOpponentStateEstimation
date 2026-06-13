@@ -42,6 +42,7 @@ find_package(nav_msgs REQUIRED)
 # Python package install
 # =====================
 ament_python_install_package(${PROJECT_NAME})
+ament_python_install_package(racetrack_utilities)
 
 # =====================
 # Includes
@@ -86,14 +87,11 @@ install(TARGETS
 )
 
 install(PROGRAMS
-  scripts/imm_filterpy.py
-  scripts/interceptor.py
-  scripts/clustering.py
-  scripts/global_raceline_publisher.py
-  scripts/walls_gen.py
+  scripts/imm.py
   scripts/rmse.py
   scripts/clustering_rf.py
-  scripts/kaval.py
+  scripts/spielberg_centerline_publisher.py
+  scripts/frenet_opp_state.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

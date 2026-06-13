@@ -1,0 +1,23 @@
+{
+    "ROS2.distro": "foxy",
+    "python.autoComplete.extraPaths": [
+        "/sim_ws/src/lidar_processing/install/lidar_processing/lib/python3.8/site-packages",
+        "/sim_ws/install/safety_node/lib/python3.8/site-packages",
+        "/sim_ws/install/py_wallfollow/lib/python3.8/site-packages",
+        "/sim_ws/install/lidar_processing/lib/python3.8/site-packages",
+        "/sim_ws/install/gt_follow_gap/lib/python3.8/site-packages",
+        "/sim_ws/install/f1tenth_gym_ros/lib/python3.8/site-packages",
+        "/sim_ws/install/drift_detector/lib/python3.8/site-packages",
+        "/opt/ros/foxy/lib/python3.8/site-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/sim_ws/src/lidar_processing/install/lidar_processing/lib/python3.8/site-packages",
+        "/sim_ws/install/safety_node/lib/python3.8/site-packages",
+        "/sim_ws/install/py_wallfollow/lib/python3.8/site-packages",
+        "/sim_ws/install/lidar_processing/lib/python3.8/site-packages",
+        "/sim_ws/install/gt_follow_gap/lib/python3.8/site-packages",
+        "/sim_ws/install/f1tenth_gym_ros/lib/python3.8/site-packages",
+        "/sim_ws/install/drift_detector/lib/python3.8/site-packages",
+        "/opt/ros/foxy/lib/python3.8/site-packages"
+    ]
+}

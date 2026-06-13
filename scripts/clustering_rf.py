@@ -91,26 +91,24 @@ class ClusteringNode(Node):
 
     def train_model(self, csv_file : str):
             """Parses training data from a csv file into a pandas DataFrame, performs additional pre-processing, and then
-            trains the RBF-kernelized support vector machine to classify whether a cluster is that of the opponent vehicle"""
+            trains the Random Forest Classifier to classify whether a cluster is that of the opponent vehicle"""
             df = pd.read_csv(csv_file).iloc[:, 1:].fillna(value=0.0)
             pd.options.mode.use_inf_as_na = True
             median_values = pd.DataFrame({label: [np.median(df[label]) for _ in range(len(df.index))] for label in df.columns})
-            # print(df.to_string())
+            
             df = df.fillna(value=median_values)
             print(df.columns)
             X = df[['x_ctr', 'y_ctr', 'max_dim', 'min_dim', 'num_points', 'aspect_ratio', 'density']]
             y = df['car_cluster']
-            # print(X)
-            # print(y)
+            
+            
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state=42, stratify=y, shuffle=True)
             X_train, X_test, y_train, y_test = X_train.reset_index(drop=True), X_test.reset_index(drop=True), y_train.reset_index(drop=True), y_test.reset_index(drop=True)
-            # print(X_train, X_test, y_train, y_test, sep='\n')
-            # print(X_train)
+            
             scaler = StandardScaler().fit(X_train)
             X_train_std = scaler.transform(X_train)
             X_test_std = scaler.transform(X_test)
-            # print(X_train_std)
-
+            
             clf = RandomForestClassifier(200, max_depth = 20, max_features='sqrt', min_samples_leaf=1, class_weight='balanced')
             clf.fit(X_train_std, y_train)
             self.get_logger().info(f"Score: {clf.score(X_test_std, y_test)}")

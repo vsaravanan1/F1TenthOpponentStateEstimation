@@ -7,9 +7,9 @@ from sensor_msgs.msg import LaserScan
 from ackermann_msgs.msg import AckermannDriveStamped
 
 
-class ReactiveFollowGap(Node):
+class OffensiveFollowGap(Node):
     def __init__(self):
-        super().__init__('reactive_follow_gap')
+        super().__init__('offensive_follow_gap')
 
         # Topics
         self.lidarscan_topic = "/opp_scan"
@@ -324,8 +324,8 @@ class ReactiveFollowGap(Node):
 # main
 def main(args=None):
     rclpy.init(args=args)
-    print("ReactiveFollowGap (Python) Initialized")
-    node = ReactiveFollowGap()
+    print("OffensiveFollowGap (Python) Initialized")
+    node = OffensiveFollowGap()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

@@ -11,12 +11,7 @@ def generate_launch_description():
         Node(
             package="lidar_processing",
             name="imm",
-            executable="imm_filterpy.py"
-        ),
-        Node(
-            package="lidar_processing",
-            name="interceptor",
-            executable="interceptor.py"
+            executable="imm.py"
         ),
         Node(
             package="lidar_processing",
@@ -30,13 +25,13 @@ def generate_launch_description():
         ),
         Node(
             package="lidar_processing",
-            name="GlobalRacelinePublisher",
-            executable="global_raceline_publisher.py"
+            name="CenterlinePublisher",
+            executable="spielberg_centerline_publisher.py"
         ),
         Node(
             package="lidar_processing",
-            name="kaval",
-            executable="kaval.py"
+            name="FrenetStatePublisher",
+            executable="frenet_opp_state.py"
         )
     ])
 
