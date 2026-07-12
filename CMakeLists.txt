@@ -92,6 +92,7 @@ install(PROGRAMS
   scripts/clustering_rf.py
   scripts/spielberg_centerline_publisher.py
   scripts/frenet_opp_state.py
+  scripts/lstm_path_predictor.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
