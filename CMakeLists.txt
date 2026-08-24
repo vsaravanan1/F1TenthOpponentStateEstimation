@@ -93,6 +93,10 @@ install(PROGRAMS
   scripts/spielberg_centerline_publisher.py
   scripts/frenet_opp_state.py
   scripts/lstm_path_predictor.py
+  scripts/imm_filterpy.py
+  scripts/interceptor.py
+  scripts/Overtake.py
+  scripts/lstm.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

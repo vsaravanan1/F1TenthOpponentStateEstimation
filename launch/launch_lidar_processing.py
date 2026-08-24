@@ -32,6 +32,19 @@ def generate_launch_description():
             package="lidar_processing",
             name="FrenetStatePublisher",
             executable="frenet_opp_state.py"
-        )
+        ),
+        Node(
+            package="lidar_processing",
+            name="Interceptor",
+            executable="interceptor.py"
+        ),
+        Node(package="lidar_processing",
+             name="imm_original",
+             executable="imm_filterpy.py"
+        ),
+        Node(package="lidar_processing",
+             name="lstm_path_predictor",
+             executable="lstm_path_predictor.py"
+        )           
     ])
 

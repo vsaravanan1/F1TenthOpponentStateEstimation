@@ -1,0 +1,35 @@
+[0.068s] Invoking command in '/sim_ws/src/lidar_processing/build/lidar_processing': /usr/bin/cmake /sim_ws/src/lidar_processing -DCMAKE_INSTALL_PREFIX=/sim_ws/src/lidar_processing/install/lidar_processing
+[0.330s] -- The C compiler identification is GNU 9.4.0
+[0.501s] -- The CXX compiler identification is GNU 9.4.0
+[0.526s] -- Check for working C compiler: /usr/bin/cc
+[0.659s] -- Check for working C compiler: /usr/bin/cc -- works
+[0.663s] -- Detecting C compiler ABI info
+[0.766s] -- Detecting C compiler ABI info - done
+[0.793s] -- Detecting C compile features
+[0.802s] -- Detecting C compile features - done
+[0.816s] -- Check for working CXX compiler: /usr/bin/c++
+[0.961s] -- Check for working CXX compiler: /usr/bin/c++ -- works
+[0.962s] -- Detecting CXX compiler ABI info
+[1.088s] -- Detecting CXX compiler ABI info - done
+[1.109s] -- Detecting CXX compile features
+[1.110s] -- Detecting CXX compile features - done
+[1.144s] CMake Error at CMakeLists.txt:21 (find_package):
+[1.144s]   By not providing "Findament_cmake.cmake" in CMAKE_MODULE_PATH this project
+[1.144s]   has asked CMake to find a package configuration file provided by
+[1.144s]   "ament_cmake", but CMake did not find one.
+[1.145s] 
+[1.145s]   Could not find a package configuration file provided by "ament_cmake" with
+[1.145s]   any of the following names:
+[1.146s] 
+[1.146s]     ament_cmakeConfig.cmake
+[1.147s]     ament_cmake-config.cmake
+[1.147s] 
+[1.148s]   Add the installation prefix of "ament_cmake" to CMAKE_PREFIX_PATH or set
+[1.149s]   "ament_cmake_DIR" to a directory containing one of the above files.  If
+[1.150s]   "ament_cmake" provides a separate development package or SDK, be sure it
+[1.154s]   has been installed.
+[1.155s] 
+[1.157s] 
+[1.158s] -- Configuring incomplete, errors occurred!
+[1.158s] See also "/sim_ws/src/lidar_processing/build/lidar_processing/CMakeFiles/CMakeOutput.log".
+[1.159s] Invoked command in '/sim_ws/src/lidar_processing/build/lidar_processing' returned '1': /usr/bin/cmake /sim_ws/src/lidar_processing -DCMAKE_INSTALL_PREFIX=/sim_ws/src/lidar_processing/install/lidar_processing

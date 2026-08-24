@@ -1,87 +1,36 @@
 #!/usr/bin/env python3
 """
 ROS2 node that predicts and visualizes the opponent vehicle's future
-trajectory using the pretrained LSTM seq2seq model from the current
-training script (main.py).
+trajectory using the raceline-context LSTM seq2seq model.
 
-This is a rewrite of the original node to match the ACTUAL trained
-model architecture and feature set, which differ from what the first
-version of this node assumed:
+Model interface (must match lstm.py / the training script):
 
-  * Features are [dt, rel_s, rel_d] (3 features) -- NOT
-    [opp_s, opp_d, ego_s, ego_d, ego_v] (5 features). rel_s/rel_d are
-    the opponent's position relative to ego in Frenet coordinates,
-    matching TrajectoryPoint in the training script exactly. ego_v is
-    not used by this model at all.
-  * The model architecture is an nn.LSTM(num_layers=2) encoder feeding
-    a 2-cell LSTMCell decoder that is driven at each step by an
-    explicit future dt value (NOT autoregressively fed its own
-    previous output). This means the caller must supply a dt schedule
-    for however many future steps it wants predicted.
-  * All model inputs/outputs are NORMALIZED using per-feature
-    mean/std computed from the training set (see compute_norm_stats
-    in main.py). These stats are saved to checkpoint/norm_stats.npz
-    during training and loaded here -- if you retrain, make sure that
-    file gets regenerated and this node picks up the new one.
+    Inputs per history step:
+        [opp_s, opp_d, ego_s, ego_d, ego_v]        # 5 features, NO dt
 
-Prediction horizon
--------------------
-This node predicts PREDICTION_HORIZON_SEC (2.0s) into the future,
-split into FUTURE_LEN steps of STEP_DT = horizon / FUTURE_LEN each,
-matching the future_len=15 the model was trained with (the decoder is
-a recurrent loop over whatever dt sequence you feed it, so it isn't
-strictly locked to 15 steps -- but staying close to the training
-horizon length is the safer choice for now rather than extrapolating
-the decoder far outside what it was trained to unroll).
+    Context (per prediction):
+        a fan of constant-offset polylines over [s_start, s_end], extracted
+        from a precomputed whole-track fan via get_polyline_segments(...)
 
-Pipeline
---------
-1. Listen to ego odometry (/ego_racecar/odom). Convert ego (x, y) into
-   Frenet coordinates (ego_s, ego_d) via RacetrackUtilities.
-2. Listen to the opponent's absolute Frenet state
-   (/frenet_opp_state_vector), published as [opp_s, opp_d, dt] by
-   FrenetOpponentStateNode. Combine with the latest ego state to get
-   rel_s = opp_s - ego_s (wrapped to the shorter way around the
-   track) and rel_d = opp_d - ego_d.
-3. Push [dt, rel_s, rel_d] into a fixed-size sliding window (deque,
-   maxlen=HISTORY_LEN, matching the training history_len=30).
-4. Once the window holds HISTORY_LEN samples, normalize it, run one
-   forward pass with a fixed 2-second future dt schedule, and
-   denormalize the predicted [rel_s, rel_d] sequence.
-5. Convert each predicted (rel_s, rel_d) back to an absolute map-frame
-   (x, y) -- anchored at the CURRENT ego (s, d), since we don't have a
-   model of ego's own future motion -- and publish as a
-   nav_msgs/Path for RViz.
+    Outputs per future step:
+        [delta_s, delta_d]                          # BOTH are deltas
 
-Partial observability
-----------------------
-If no real opponent observation arrives for `no_observation_timeout`
-seconds, the node assumes the opponent is temporarily occluded/lost
-and starts feeding itself pseudo-observations every
-`pseudo_update_interval` seconds. Each pseudo-observation is the
-median (by time-index) waypoint of the most recently generated
-predicted trajectory -- already in (rel_s, rel_d) space, so it can be
-pushed onto the window directly, with dt set to pseudo_update_interval
--- fed back exactly like a real measurement, so the model keeps
-"coasting" a trajectory instead of going stale. The moment a real
-observation arrives, pseudo-updates stop immediately and the node
-reverts to driving off real data.
+TIME RESAMPLING
+---------------
+The model was trained on history steps that are TARGET_DT (50 ms) apart. At
+inference, perception latency makes real observations arrive further apart and
+irregularly. Feeding those directly would make the encoder see inflated
+per-step motion and produce an over-long predicted path.
 
-Assumptions worth double-checking against your real RacetrackUtilities
-class (its source wasn't included, so these are best guesses):
-  * It exposes an inverse Frenet->Cartesian method. I've called it
-    `convert_to_cartesian(s, d) -> (x, y)` below. If your class names
-    it something else (e.g. `frenet_to_cartesian`), update that one
-    call in `predict_and_publish`.
-  * `in_bounds_cartesian(x, y)` and `convert_to_frenet(x, y)` behave
-    the same way for ego as they do for the opponent in the node this
-    was based on.
-  * `metadata()` exposes the track's total arclength under the key
-    'arclength', used to wrap rel_s to the shorter distance around a
-    closed track (e.g. an opponent just ahead across the start/finish
-    line should read as a small positive rel_s, not track_length minus
-    a small number). If this key is named differently, update
-    `wrap_rel_s` below.
+So each real observation is linearly interpolated against the previous accepted
+one into ceil(effective_dt / TARGET_DT) sub-steps spaced ~TARGET_DT apart (the
+final sub-step lands exactly on the true measurement). Example: a 196 ms gap
+becomes 4 sub-steps of 49 ms. Stale (repeated) measurements are skipped and
+their dt is accumulated so the next real observation interpolates over the full
+elapsed interval.
+
+NB: dt is assumed to be in SECONDS (consistent with the other timing params).
+If your opponent message carries dt in milliseconds, set TARGET_DT = 50.0.
 """
 
 import math
@@ -90,7 +39,6 @@ from collections import deque
 import numpy as np
 import rclpy
 import torch
-import torch.nn as nn
 from geometry_msgs.msg import PoseStamped, Quaternion
 from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
@@ -98,69 +46,35 @@ from std_msgs.msg import Float64MultiArray
 
 from racetrack_utilities.racetrack_utilities import RacetrackUtilities
 
-# -----------------------------
-# Constants (must match training script / checkpoint)
-# -----------------------------
-HISTORY_LEN = 30          # matches history_len=30 used in main.py's TrajectoryDataset calls
-FUTURE_LEN = 15           # matches future_len=15 used in training
-PREDICTION_HORIZON_SEC = 2.0
-STEP_DT = PREDICTION_HORIZON_SEC / FUTURE_LEN   # seconds per predicted step
-N_FEATURES = 3             # [dt, rel_s, rel_d] -- must match encoder_lstm's input_size
+# Import the model + context helper from the (import-safe) training module.
+from lstm import (
+    LSTMModel,
+    get_polyline_segments,
+    NUM_OFFSETS,
+    FAN_RESOLUTION,
+)
 
 
 # -----------------------------
-# Model definition -- copied verbatim (architecture-wise) from the
-# current training script (main.py) so this node is self-contained.
-# Keep this in sync with main.py's LSTMModel; if you change the
-# architecture there, retrain and update this class too.
+# Constants that must match training
 # -----------------------------
-class LSTMModel(nn.Module):
-    def __init__(self, n_hidden=51):
-        super(LSTMModel, self).__init__()
-        self.n_hidden = n_hidden
+HISTORY_LEN = 15
+FUTURE_LEN = 40
+N_FEATURES = 5          # [opp_s, opp_d, ego_s, ego_d, ego_v]  (dt removed)
+N_HIDDEN = 51
+N_CONTEXT = 32          # must equal n_context used in training
 
-        self.encoder_lstm = nn.LSTM(
-            input_size=3, hidden_size=self.n_hidden, num_layers=2,
-            batch_first=True, dropout=0.2,
-        )
-        self.decoder_lstm1 = nn.LSTMCell(input_size=3, hidden_size=self.n_hidden)
-        self.decoder_lstm2 = nn.LSTMCell(input_size=self.n_hidden, hidden_size=self.n_hidden)
-        self.linear = nn.Linear(self.n_hidden, 2)
+# Training history spacing. Real observations are resampled to this cadence.
+TARGET_DT = 0.05        # seconds (50 ms)
+# Cap sub-steps from a single gap so a pathological dt can't spin forever;
+# more than HISTORY_LEN sub-steps would just refill the whole deque anyway.
+MAX_INTERP_STEPS = HISTORY_LEN
 
-    def forward(self, x, future_dts):
-        """
-        x: (n, history_len, 3) normalized [dt, rel_s, rel_d]
-        future_dts: (n, future_len, 1) normalized dt values to drive the decoder
-        returns: (n, future_len, 2) normalized [rel_s, rel_d] predictions
-        """
-        n_samples = x.shape[0]
-
-        h_e = torch.zeros(2, n_samples, self.n_hidden, dtype=torch.float32)
-        c_e = torch.zeros(2, n_samples, self.n_hidden, dtype=torch.float32)
-
-        encoder_output, (h_e, c_e) = self.encoder_lstm(x, (h_e, c_e))
-        current_state = self.linear(encoder_output[:, -1, :])
-
-        h_d1 = h_e[0]
-        h_d2 = h_e[1]
-        c_d1 = c_e[0]
-        c_d2 = c_e[1]
-
-        outputs = []
-        future_len = future_dts.shape[1]
-        for i in range(future_len):
-            timesteps = future_dts[:, i, :]
-            full_states = torch.cat([current_state, timesteps], dim=1)
-            h_d1, c_d1 = self.decoder_lstm1(full_states, (h_d1, c_d1))
-            h_d2, c_d2 = self.decoder_lstm2(h_d1, (h_d2, c_d2))
-            current_state = self.linear(h_d2)
-            outputs.append(current_state)
-
-        return torch.stack(outputs, dim=1)
+STALE_POSITION_EPS = 1e-6
 
 
 def yaw_to_quaternion(yaw: float) -> Quaternion:
-    """Minimal yaw-only quaternion, avoids a tf2 dependency just for this."""
+    """Create a yaw-only quaternion without requiring tf2."""
     return Quaternion(x=0.0, y=0.0, z=math.sin(yaw / 2.0), w=math.cos(yaw / 2.0))
 
 
@@ -173,71 +87,74 @@ class LSTMOpponentPathPredictorNode(Node):
             'map_csv_path',
             '/sim_ws/src/lidar_processing/scripts/Spielberg_map.csv',
         )
-        self.declare_parameter('model_path', '/sim_ws/src/lidar_processing/scripts/checkpoint/best_model.pt')
-        self.declare_parameter('norm_stats_path', '/sim_ws/src/lidar_processing/scripts/checkpoint/norm_stats.npz')
+        self.declare_parameter(
+            'model_path',
+            '/sim_ws/src/lidar_processing/scripts/checkpoint/'
+            'context_best_model.pt',
+        )
         self.declare_parameter('ego_odom_topic', '/ego_racecar/odom')
         self.declare_parameter('opp_frenet_topic', '/frenet_opp_state_vector')
         self.declare_parameter('predicted_path_topic', '/predicted_opponent_path')
-        self.declare_parameter('no_observation_timeout', 2.0)   # seconds
-        self.declare_parameter('pseudo_update_interval', 0.25)  # seconds, 250 ms
+        self.declare_parameter('no_observation_timeout', 2.00)
+        self.declare_parameter('pseudo_update_interval', 0.750)
 
         map_csv_path = self.get_parameter('map_csv_path').value
         model_path = self.get_parameter('model_path').value
-        norm_stats_path = self.get_parameter('norm_stats_path').value
         ego_odom_topic = self.get_parameter('ego_odom_topic').value
         opp_frenet_topic = self.get_parameter('opp_frenet_topic').value
         predicted_path_topic = self.get_parameter('predicted_path_topic').value
-        self.no_observation_timeout = self.get_parameter('no_observation_timeout').value
-        self.pseudo_update_interval = self.get_parameter('pseudo_update_interval').value
+        self.no_observation_timeout = float(
+            self.get_parameter('no_observation_timeout').value
+        )
+        self.pseudo_update_interval = float(
+            self.get_parameter('pseudo_update_interval').value
+        )
 
         # ---- racetrack ----
         self.racetrack = RacetrackUtilities(map_csv_path)
         meta = self.racetrack.metadata()
-        self.track_length = meta['arclength']
+        self.track_length = float(meta['arclength'])
         self.get_logger().info(
             f"Loaded racetrack: {meta['num_points']} points, {self.track_length:.1f}m"
         )
 
-        # ---- normalization stats ----
-        # These MUST come from the same training run that produced model_path.
-        # Loading mismatched stats will silently produce wrong predictions
-        # (no error -- the shapes all still line up, the numbers are just
-        # scaled incorrectly).
-        stats = np.load(norm_stats_path)
-        self.mean = stats['mean'].astype(np.float32)   # [dt, rel_s, rel_d]
-        self.std = stats['std'].astype(np.float32)
+        # ---- precomputed context fan (built once, same params as training) ----
+        fan_np, d_values = self.racetrack.precompute_fan(
+            num_points_total=FAN_RESOLUTION, num_offsets=NUM_OFFSETS
+        )
+        self.fan = torch.from_numpy(fan_np)          # (P, N, 3), cpu float32
+        self.fan_arclength = float(self.racetrack.arclength)
         self.get_logger().info(
-            f"Loaded normalization stats from {norm_stats_path}: "
-            f"mean={self.mean}, std={self.std}"
+            f"Precomputed context fan: {tuple(self.fan.shape)}, "
+            f"offsets={np.round(d_values, 3)}"
         )
 
         # ---- model ----
-        self.model = LSTMModel()
+        self.model = LSTMModel(
+            n_hidden=N_HIDDEN, n_context=N_CONTEXT, num_offsets=NUM_OFFSETS
+        )
         state_dict = torch.load(model_path, map_location='cpu')
-        self.model.load_state_dict(state_dict)
+        self.model.load_state_dict(state_dict)   # strict: fails loud on width mismatch
         self.model.eval()
         self.get_logger().info(f"Loaded LSTM weights from {model_path}")
 
-        # Precompute the fixed future dt schedule for a PREDICTION_HORIZON_SEC
-        # lookahead, normalized using the dt column's mean/std. This is the
-        # same tensor every call, so build it once.
-        raw_future_dts = np.full((1, FUTURE_LEN, 1), STEP_DT, dtype=np.float32)
-        norm_future_dts = (raw_future_dts - self.mean[0]) / self.std[0]
-        self.future_dts_tensor = torch.from_numpy(norm_future_dts)
-
-        # ---- sliding-window state ----
+        # ---- current ego state ----
+        self.latest_ego_s_wrapped = None
         self.latest_ego_s = None
         self.latest_ego_d = None
-        self.history = deque(maxlen=HISTORY_LEN)  # each entry: [dt, rel_s, rel_d]
+        self.latest_ego_v = None
 
-        # most recently generated predicted trajectory, [FUTURE_LEN, 2] of
-        # (rel_s, rel_d) -- used as the source of pseudo-observations during
-        # occlusion.
-        self.last_prediction = None
-        # ROS time of the last *real* opponent observation
+        # ---- opponent/model state ----
+        # Each history entry (training feature order, 5 features):
+        # [opp_s_unwrapped, opp_d, ego_s_unwrapped, ego_d, ego_v]
+        self.history = deque(maxlen=HISTORY_LEN)
+
+        # Elapsed time from skipped stale measurements, folded into the next
+        # accepted observation so interpolation spans the true interval.
+        self.pending_dt = 0.0
+
+        self.last_prediction = None      # [FUTURE_LEN, 2] absolute [opp_s_unwrapped, opp_d]
         self.last_real_obs_time = None
-        # purely for logging -- tracks whether we're currently coasting on
-        # pseudo-observations so we only log the mode transition once
         self.in_pseudo_mode = False
 
         # ---- pub/sub ----
@@ -248,140 +165,229 @@ class LSTMOpponentPathPredictorNode(Node):
             Float64MultiArray, opp_frenet_topic, self.opp_frenet_cb, 10
         )
         self.path_pub = self.create_publisher(Path, predicted_path_topic, 10)
-
-        # fires every `pseudo_update_interval` seconds; only takes action once
-        # `no_observation_timeout` seconds have passed without a real observation
         self.pseudo_update_timer = self.create_timer(
             self.pseudo_update_interval, self.pseudo_update_cb
         )
 
     # -------------------------------------------------
-    def wrap_rel_s(self, rel_s: float) -> float:
-        """Wrap a raw s-difference to the shorter way around a closed
-        track, e.g. an opponent just ahead across the start/finish line
-        should read as a small positive rel_s, not track_length minus a
-        small number."""
+    def unwrap_s(self, wrapped_s: float, reference_unwrapped_s):
+        """Unwrap one Frenet s measurement around a continuous reference."""
+        wrapped_s = float(wrapped_s) % self.track_length
+        if reference_unwrapped_s is None:
+            return wrapped_s
+        reference_wrapped = reference_unwrapped_s % self.track_length
         half = self.track_length / 2.0
-        return ((rel_s + half) % self.track_length) - half
+        delta = ((wrapped_s - reference_wrapped + half) % self.track_length) - half
+        return float(reference_unwrapped_s + delta)
 
     # -------------------------------------------------
     def ego_odom_cb(self, msg: Odometry):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
-
         if not self.racetrack.in_bounds_cartesian(x, y):
             self.get_logger().debug(
                 f"ego ({x:.2f}, {y:.2f}) outside racetrack bounds -- skipping"
             )
             return
 
-        ego_s, ego_d = self.racetrack.convert_to_frenet(x, y)
+        ego_s_wrapped, ego_d = self.racetrack.convert_to_frenet(x, y)
+        ego_vx = msg.twist.twist.linear.x
+        ego_vy = msg.twist.twist.linear.y
+        ego_v = math.sqrt(ego_vx ** 2 + ego_vy ** 2)
 
-        self.latest_ego_s = ego_s
-        self.latest_ego_d = ego_d
+        self.latest_ego_s = self.unwrap_s(ego_s_wrapped, self.latest_ego_s)
+        self.latest_ego_s_wrapped = float(ego_s_wrapped)
+        self.latest_ego_d = float(ego_d)
+        self.latest_ego_v = float(ego_v)
+
+    # -------------------------------------------------
+    def reset_prediction_state(self):
+        """Clear state when a new overtake/teleport instance begins."""
+        self.history.clear()
+        self.pending_dt = 0.0
+        self.last_prediction = None
+        self.last_real_obs_time = None
+        self.in_pseudo_mode = False
+
+        if self.latest_ego_s_wrapped is not None:
+            self.latest_ego_s = self.latest_ego_s_wrapped
+        else:
+            self.latest_ego_s = None
+
+        self.get_logger().info("Cleared LSTM history for new overtake instance")
 
     # -------------------------------------------------
     def opp_frenet_cb(self, msg: Float64MultiArray):
-        opp_s, opp_d, dt = msg.data
+        if len(msg.data) < 3:
+            self.get_logger().warn(
+                "Opponent Frenet message must contain [opp_s, opp_d, dt]"
+            )
+            return
+
+        opp_s_wrapped, opp_d, dt = msg.data[:3]
+        dt = float(dt)
+
+        # dt <= 0 is the teleport/reset signal (dt itself is not a model input).
+        if dt <= 0.0:
+            self.reset_prediction_state()
+            dt = 0.0
 
         if self.in_pseudo_mode:
             self.get_logger().info(
-                "Real opponent observation received -- exiting pseudo-observation "
-                "mode and reverting to real-data updates"
+                "Real opponent observation received -- exiting pseudo mode"
             )
             self.in_pseudo_mode = False
 
         self.last_real_obs_time = self.get_clock().now()
 
-        if self.latest_ego_s is None:
-            return  # haven't received an ego odom sample yet
+        if (
+            self.latest_ego_s is None
+            or self.latest_ego_d is None
+            or self.latest_ego_v is None
+        ):
+            return
 
-        rel_s = self.wrap_rel_s(opp_s - self.latest_ego_s)
-        rel_d = opp_d - self.latest_ego_d
-        self._push_observation(dt, rel_s, rel_d)
+        reference_opp_s = self.history[-1][0] if len(self.history) > 0 else None
+        opp_s_unwrapped = self.unwrap_s(opp_s_wrapped, reference_opp_s)
+        opp_d = float(opp_d)
+
+        # Skip stale (repeated) measurements, but remember their elapsed time so
+        # the next real observation interpolates over the full gap.
+        if len(self.history) > 0:
+            last_opp_s = self.history[-1][0]
+            last_opp_d = self.history[-1][1]
+            if (math.isclose(opp_s_unwrapped, last_opp_s,
+                             abs_tol=STALE_POSITION_EPS, rel_tol=0.0)
+                    and math.isclose(opp_d, last_opp_d,
+                                     abs_tol=STALE_POSITION_EPS, rel_tol=0.0)):
+                self.pending_dt += dt
+                return
+
+        effective_dt = dt + self.pending_dt
+        self.pending_dt = 0.0
+
+        self._ingest_real_observation(opp_s_unwrapped, opp_d, effective_dt)
+
+    # -------------------------------------------------
+    def _append_point(self, opp_s, opp_d, ego_s, ego_d, ego_v):
+        self.history.append([
+            float(opp_s), float(opp_d),
+            float(ego_s), float(ego_d), float(ego_v),
+        ])
+
+    def _ingest_real_observation(self, opp_s_unwrapped, opp_d, effective_dt):
+        """Resample the (previous -> new) interval into ~TARGET_DT sub-steps and
+        append them, then predict once if the history is full."""
+        ego_s, ego_d, ego_v = self.latest_ego_s, self.latest_ego_d, self.latest_ego_v
+
+        if len(self.history) == 0:
+            # No previous point to interpolate from -- seed the history.
+            self._append_point(opp_s_unwrapped, opp_d, ego_s, ego_d, ego_v)
+        else:
+            last = self.history[-1]                      # fixed start endpoint
+            n = max(1, math.ceil(effective_dt / TARGET_DT))
+            n = min(n, MAX_INTERP_STEPS)
+            for k in range(1, n + 1):
+                frac = k / n                            # k=n lands on the true measurement
+                self._append_point(
+                    last[0] + frac * (opp_s_unwrapped - last[0]),
+                    last[1] + frac * (opp_d - last[1]),
+                    last[2] + frac * (ego_s - last[2]),
+                    last[3] + frac * (ego_d - last[3]),
+                    last[4] + frac * (ego_v - last[4]),
+                )
+
+        if len(self.history) >= HISTORY_LEN:
+            self.predict_and_publish()
 
     # -------------------------------------------------
     def pseudo_update_cb(self):
-        """Timer callback, fires every `pseudo_update_interval` seconds.
-        Only takes action once `no_observation_timeout` seconds have
-        elapsed since the last real opponent observation -- otherwise
-        it's a no-op, so it's safe to just let this timer run forever."""
+        """Advance the model using its own absolute predicted trajectory when the
+        opponent has not been observed for a while."""
         if self.last_real_obs_time is None:
-            return  # haven't seen a single real observation yet
+            return
 
         elapsed = (self.get_clock().now() - self.last_real_obs_time).nanoseconds * 1e-9
         if elapsed < self.no_observation_timeout:
-            return  # still within the trusted real-observation window
-
+            return
         if self.last_prediction is None:
-            return  # no trajectory generated yet to draw a pseudo-point from
+            return
+        if (self.latest_ego_s is None or self.latest_ego_d is None
+                or self.latest_ego_v is None):
+            return
 
         if not self.in_pseudo_mode:
             self.get_logger().warn(
                 f"No opponent observation for {elapsed:.2f}s "
-                f"(timeout={self.no_observation_timeout:.2f}s) -- switching to "
-                f"pseudo-observation updates every {self.pseudo_update_interval:.2f}s"
+                f"(timeout={self.no_observation_timeout:.2f}s) -- "
+                f"switching to pseudo updates every "
+                f"{self.pseudo_update_interval:.2f}s"
             )
             self.in_pseudo_mode = True
 
-        # median (by time-index) waypoint of the last predicted trajectory.
-        # Already in (rel_s, rel_d) space, so it can be pushed directly.
-        median_idx = len(self.last_prediction) // 2
-        pseudo_rel_s, pseudo_rel_d = self.last_prediction[median_idx]
-        self._push_observation(self.pseudo_update_interval, float(pseudo_rel_s), float(pseudo_rel_d))
-
-    # -------------------------------------------------
-    def _push_observation(self, dt: float, rel_s: float, rel_d: float):
-        """Shared by real and pseudo observations."""
-        self.history.append([dt, rel_s, rel_d])  # deque maxlen handles the sliding window
-
-        if len(self.history) < HISTORY_LEN:
-            return  # still filling the window
-
-        self.predict_and_publish()
+        # last_prediction is already at TARGET_DT spacing; step 0 is one 50 ms
+        # step ahead of the current anchor, so push it directly (no interp).
+        pseudo_opp_s, pseudo_opp_d = self.last_prediction[0]
+        self._append_point(
+            float(pseudo_opp_s), float(pseudo_opp_d),
+            self.latest_ego_s, self.latest_ego_d, self.latest_ego_v,
+        )
+        if len(self.history) >= HISTORY_LEN:
+            self.predict_and_publish()
 
     # -------------------------------------------------
     def predict_and_publish(self):
-        x_raw = np.array(self.history, dtype=np.float32)       # [HISTORY_LEN, 3]
-        x_norm = (x_raw - self.mean) / self.std
-        x_tensor = torch.from_numpy(x_norm).unsqueeze(0)       # [1, HISTORY_LEN, 3]
+        # History as (HISTORY_LEN, 5): [opp_s, opp_d, ego_s, ego_d, ego_v]
+        x_raw = np.asarray(self.history, dtype=np.float32)
+        x_tensor = torch.from_numpy(x_raw).unsqueeze(0)          # (1, 15, 5)
+
+        # Context window, computed EXACTLY as in training. Now that history is
+        # resampled to TARGET_DT, the (now - prev) step is a true 50 ms delta,
+        # so this constant-velocity s_end is correctly scaled.
+        opp_s_now = float(x_raw[-1, 0])
+        opp_s_prev = float(x_raw[-2, 0])
+        s_start = float(x_raw[0, 0])
+        s_end = opp_s_now + FUTURE_LEN * (opp_s_now - opp_s_prev)
+
+        segments = get_polyline_segments(
+            self.fan,
+            self.fan_arclength,
+            torch.tensor([s_start]),
+            torch.tensor([s_end]),
+        )                                                        # (1, P, 20, 3)
 
         with torch.no_grad():
-            pred_norm = self.model(x_tensor, self.future_dts_tensor)  # [1, FUTURE_LEN, 2]
+            pred_delta = self.model(x_tensor, segments, future=FUTURE_LEN)
 
-        # denormalize predicted [rel_s, rel_d] using the position columns'
-        # mean/std (indices 1, 2 -- index 0 is dt)
-        pred_norm = pred_norm.squeeze(0).numpy()                # [FUTURE_LEN, 2]
-        pred_rel = pred_norm * self.std[1:] + self.mean[1:]     # [FUTURE_LEN, 2], raw units
+        pred_delta = pred_delta.squeeze(0).cpu().numpy()         # (FUTURE_LEN, 2)
 
-        self.last_prediction = pred_rel  # cached for pseudo-observation updates
+        # Outputs are cumulative [delta_s, delta_d] from the final history
+        # opponent position. Reconstruct absolute continuous Frenet positions.
+        anchor_opp_s = float(x_raw[-1, 0])
+        anchor_opp_d = float(x_raw[-1, 1])
+
+        pred_abs = np.empty_like(pred_delta)
+        pred_abs[:, 0] = anchor_opp_s + pred_delta[:, 0]
+        pred_abs[:, 1] = anchor_opp_d + pred_delta[:, 1]
+
+        self.last_prediction = pred_abs
 
         path_msg = Path()
         path_msg.header.frame_id = 'map'
         path_msg.header.stamp = self.get_clock().now().to_msg()
 
-        # Anchor predicted relative positions to the CURRENT ego (s, d).
-        # We don't have a model of ego's own future motion, so this is an
-        # approximation: it assumes ego holds its current Frenet position
-        # for the purpose of converting the opponent's predicted relative
-        # offsets back into absolute map-frame coordinates. Good enough for
-        # visualization over a short (2s) horizon; revisit if ego moves
-        # fast relative to the horizon length.
-        anchor_s = self.latest_ego_s
-        anchor_d = self.latest_ego_d
-
         prev_xy = None
-        for rel_s_pred, rel_d_pred in pred_rel:
-            abs_s = self.wrap_rel_s(anchor_s + rel_s_pred) if self.track_length else anchor_s + rel_s_pred
-            abs_s = abs_s % self.track_length
-            abs_d = anchor_d + rel_d_pred
-
-            x_pred, y_pred = self.racetrack.convert_to_cartesian(float(abs_s), float(abs_d))
+        for opp_s_unwrapped, opp_d_pred in pred_abs:
+            opp_s_wrapped = float(opp_s_unwrapped) % self.track_length
+            opp_d_pred = float(opp_d_pred)
+            x_pred, y_pred = self.racetrack.convert_to_cartesian(
+                opp_s_wrapped, opp_d_pred
+            )
 
             pose = PoseStamped()
             pose.header = path_msg.header
-            pose.pose.position.x = x_pred
-            pose.pose.position.y = y_pred
+            pose.pose.position.x = float(x_pred)
+            pose.pose.position.y = float(y_pred)
             pose.pose.position.z = 0.0
 
             if prev_xy is not None:
@@ -395,17 +401,18 @@ class LSTMOpponentPathPredictorNode(Node):
 
         self.path_pub.publish(path_msg)
         self.get_logger().debug(
-            f"published {PREDICTION_HORIZON_SEC:.1f}s predicted path "
-            f"with {len(path_msg.poses)} poses"
+            f"Published predicted path with {len(path_msg.poses)} poses"
         )
 
 
 def main(args=None):
     rclpy.init(args=args)
     node = LSTMOpponentPathPredictorNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':
