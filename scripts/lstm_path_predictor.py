@@ -14,23 +14,6 @@ Model interface (must match lstm.py / the training script):
 
     Outputs per future step:
         [delta_s, delta_d]                          # BOTH are deltas
-
-TIME RESAMPLING
----------------
-The model was trained on history steps that are TARGET_DT (50 ms) apart. At
-inference, perception latency makes real observations arrive further apart and
-irregularly. Feeding those directly would make the encoder see inflated
-per-step motion and produce an over-long predicted path.
-
-So each real observation is linearly interpolated against the previous accepted
-one into ceil(effective_dt / TARGET_DT) sub-steps spaced ~TARGET_DT apart (the
-final sub-step lands exactly on the true measurement). Example: a 196 ms gap
-becomes 4 sub-steps of 49 ms. Stale (repeated) measurements are skipped and
-their dt is accumulated so the next real observation interpolates over the full
-elapsed interval.
-
-NB: dt is assumed to be in SECONDS (consistent with the other timing params).
-If your opponent message carries dt in milliseconds, set TARGET_DT = 50.0.
 """
 
 import math
@@ -39,10 +22,11 @@ from collections import deque
 import numpy as np
 import rclpy
 import torch
-from geometry_msgs.msg import PoseStamped, Quaternion
+from geometry_msgs.msg import PoseStamped, Quaternion, Pose, Point
 from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, ColorRGBA
+from visualization_msgs.msg import Marker
 
 from racetrack_utilities.racetrack_utilities import RacetrackUtilities
 
@@ -90,11 +74,11 @@ class LSTMOpponentPathPredictorNode(Node):
         self.declare_parameter(
             'model_path',
             '/sim_ws/src/lidar_processing/scripts/checkpoint/'
-            'context_best_model.pt',
+            'singleposbestmodel.pt',
         )
         self.declare_parameter('ego_odom_topic', '/ego_racecar/odom')
         self.declare_parameter('opp_frenet_topic', '/frenet_opp_state_vector')
-        self.declare_parameter('predicted_path_topic', '/predicted_opponent_path')
+        self.declare_parameter('predicted_marker_topic', '/predicted_opponent_state')
         self.declare_parameter('no_observation_timeout', 2.00)
         self.declare_parameter('pseudo_update_interval', 0.750)
 
@@ -102,7 +86,7 @@ class LSTMOpponentPathPredictorNode(Node):
         model_path = self.get_parameter('model_path').value
         ego_odom_topic = self.get_parameter('ego_odom_topic').value
         opp_frenet_topic = self.get_parameter('opp_frenet_topic').value
-        predicted_path_topic = self.get_parameter('predicted_path_topic').value
+        predicted_marker_topic = self.get_parameter('predicted_marker_topic').value
         self.no_observation_timeout = float(
             self.get_parameter('no_observation_timeout').value
         )
@@ -164,10 +148,10 @@ class LSTMOpponentPathPredictorNode(Node):
         self.opp_frenet_sub = self.create_subscription(
             Float64MultiArray, opp_frenet_topic, self.opp_frenet_cb, 10
         )
-        self.path_pub = self.create_publisher(Path, predicted_path_topic, 10)
-        self.pseudo_update_timer = self.create_timer(
-            self.pseudo_update_interval, self.pseudo_update_cb
-        )
+        self.marker_pub = self.create_publisher(Marker, predicted_marker_topic, 10)
+        # self.pseudo_update_timer = self.create_timer(
+        #     self.pseudo_update_interval, self.pseudo_update_cb
+        # )
 
     # -------------------------------------------------
     def unwrap_s(self, wrapped_s: float, reference_unwrapped_s):
@@ -244,61 +228,34 @@ class LSTMOpponentPathPredictorNode(Node):
             self.latest_ego_s is None
             or self.latest_ego_d is None
             or self.latest_ego_v is None
-        ):
-            return
+        ): return
 
         reference_opp_s = self.history[-1][0] if len(self.history) > 0 else None
         opp_s_unwrapped = self.unwrap_s(opp_s_wrapped, reference_opp_s)
         opp_d = float(opp_d)
 
-        # Skip stale (repeated) measurements, but remember their elapsed time so
-        # the next real observation interpolates over the full gap.
-        if len(self.history) > 0:
-            last_opp_s = self.history[-1][0]
-            last_opp_d = self.history[-1][1]
-            if (math.isclose(opp_s_unwrapped, last_opp_s,
-                             abs_tol=STALE_POSITION_EPS, rel_tol=0.0)
-                    and math.isclose(opp_d, last_opp_d,
-                                     abs_tol=STALE_POSITION_EPS, rel_tol=0.0)):
-                self.pending_dt += dt
-                return
-
-        effective_dt = dt + self.pending_dt
-        self.pending_dt = 0.0
-
-        self._ingest_real_observation(opp_s_unwrapped, opp_d, effective_dt)
-
-    # -------------------------------------------------
-    def _append_point(self, opp_s, opp_d, ego_s, ego_d, ego_v):
-        self.history.append([
-            float(opp_s), float(opp_d),
-            float(ego_s), float(ego_d), float(ego_v),
-        ])
-
-    def _ingest_real_observation(self, opp_s_unwrapped, opp_d, effective_dt):
-        """Resample the (previous -> new) interval into ~TARGET_DT sub-steps and
-        append them, then predict once if the history is full."""
-        ego_s, ego_d, ego_v = self.latest_ego_s, self.latest_ego_d, self.latest_ego_v
-
-        if len(self.history) == 0:
-            # No previous point to interpolate from -- seed the history.
-            self._append_point(opp_s_unwrapped, opp_d, ego_s, ego_d, ego_v)
-        else:
-            last = self.history[-1]                      # fixed start endpoint
-            n = max(1, math.ceil(effective_dt / TARGET_DT))
-            n = min(n, MAX_INTERP_STEPS)
-            for k in range(1, n + 1):
-                frac = k / n                            # k=n lands on the true measurement
-                self._append_point(
-                    last[0] + frac * (opp_s_unwrapped - last[0]),
-                    last[1] + frac * (opp_d - last[1]),
-                    last[2] + frac * (ego_s - last[2]),
-                    last[3] + frac * (ego_d - last[3]),
-                    last[4] + frac * (ego_v - last[4]),
-                )
-
+        self._append_point(opp_s_unwrapped, opp_d, self.latest_ego_s, self.latest_ego_d, self.latest_ego_v, dt)
+        laps = self.history[-1][0] // self.track_length
+        if laps >= 2:
+            shift = laps * self.track_length
+            for row in self.history:
+                row[0] -= shift          # opp_s
+                row[2] -= shift          # ego_s
+            if self.last_prediction is not None:
+                self.last_prediction[:, 0] -= shift
+                
         if len(self.history) >= HISTORY_LEN:
             self.predict_and_publish()
+        
+
+
+    # -------------------------------------------------
+    def _append_point(self, opp_s, opp_d, ego_s, ego_d, ego_v, dt):
+        self.history.append([
+            float(opp_s), float(opp_d),
+            float(ego_s), float(ego_d), float(ego_v), float(dt)
+        ])
+
 
     # -------------------------------------------------
     def pseudo_update_cb(self):
@@ -330,7 +287,7 @@ class LSTMOpponentPathPredictorNode(Node):
         pseudo_opp_s, pseudo_opp_d = self.last_prediction[0]
         self._append_point(
             float(pseudo_opp_s), float(pseudo_opp_d),
-            self.latest_ego_s, self.latest_ego_d, self.latest_ego_v,
+            self.latest_ego_s, self.latest_ego_d, self.latest_ego_v, float(dt)
         )
         if len(self.history) >= HISTORY_LEN:
             self.predict_and_publish()
@@ -357,9 +314,9 @@ class LSTMOpponentPathPredictorNode(Node):
         )                                                        # (1, P, 20, 3)
 
         with torch.no_grad():
-            pred_delta = self.model(x_tensor, segments, future=FUTURE_LEN)
+            pred_delta = self.model(x_tensor, segments)
 
-        pred_delta = pred_delta.squeeze(0).cpu().numpy()         # (FUTURE_LEN, 2)
+        pred_delta = pred_delta.cpu().numpy()         # (1, 2) - maybe
 
         # Outputs are cumulative [delta_s, delta_d] from the final history
         # opponent position. Reconstruct absolute continuous Frenet positions.
@@ -367,43 +324,37 @@ class LSTMOpponentPathPredictorNode(Node):
         anchor_opp_d = float(x_raw[-1, 1])
 
         pred_abs = np.empty_like(pred_delta)
-        pred_abs[:, 0] = anchor_opp_s + pred_delta[:, 0]
-        pred_abs[:, 1] = anchor_opp_d + pred_delta[:, 1]
+        pred_abs[0, 0] = anchor_opp_s + pred_delta[0, 0]
+        pred_abs[0, 1] = anchor_opp_d + pred_delta[0, 1]
 
         self.last_prediction = pred_abs
+        print(pred_abs)
 
-        path_msg = Path()
-        path_msg.header.frame_id = 'map'
-        path_msg.header.stamp = self.get_clock().now().to_msg()
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "opponent_state_estimate"
+        marker.id = 0
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
 
-        prev_xy = None
-        for opp_s_unwrapped, opp_d_pred in pred_abs:
-            opp_s_wrapped = float(opp_s_unwrapped) % self.track_length
-            opp_d_pred = float(opp_d_pred)
-            x_pred, y_pred = self.racetrack.convert_to_cartesian(
-                opp_s_wrapped, opp_d_pred
-            )
+        x, y = self.racetrack.convert_to_cartesian(float(pred_abs[0,0] % self.racetrack.arclength), pred_abs[0, 1])
+        marker.pose.position.x = float(x)
+        marker.pose.position.y = float(y)
+        marker.pose.position.z = 0.5
+        marker.pose.orientation.w = 1.0
 
-            pose = PoseStamped()
-            pose.header = path_msg.header
-            pose.pose.position.x = float(x_pred)
-            pose.pose.position.y = float(y_pred)
-            pose.pose.position.z = 0.0
+        marker.scale.x = 0.35
+        marker.scale.y = 0.35
+        marker.scale.z = 0.35
 
-            if prev_xy is not None:
-                yaw = math.atan2(y_pred - prev_xy[1], x_pred - prev_xy[0])
-                pose.pose.orientation = yaw_to_quaternion(yaw)
-            else:
-                pose.pose.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
-
-            path_msg.poses.append(pose)
-            prev_xy = (x_pred, y_pred)
-
-        self.path_pub.publish(path_msg)
-        self.get_logger().debug(
-            f"Published predicted path with {len(path_msg.poses)} poses"
-        )
-
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+        marker.lifetime = rclpy.duration.Duration(seconds=0.5).to_msg()
+        
+        self.marker_pub.publish(marker)
 
 def main(args=None):
     rclpy.init(args=args)

@@ -33,7 +33,8 @@ class RacetrackUtilities:
         total_arclength = cumlen[-1]
         u = cumlen / total_arclength
 
-        tck, _ = splprep([self.centerline[:, 0], self.centerline[:, 1]], u=u, s=0, k=3, per=True)
+        m = len(self.centerline)
+        tck, _ = splprep([self.centerline[:, 0], self.centerline[:, 1]], u=u, s=m*0.02, k=3, per=True)
         tck_widths, _ = splprep([self.racetrack_widths[:, 0], self.racetrack_widths[:, 1]], u=u, s=0, k=3, per=True)
         return u, tck, total_arclength, tck_widths
 

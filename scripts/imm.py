@@ -23,8 +23,8 @@ import numpy as np
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray
-from nav_msgs.msg import Path
+from std_msgs.msg import Float64MultiArray, Bool
+from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import PoseStamped, Pose, Point
 from visualization_msgs.msg import MarkerArray, Marker
 from racetrack_utilities.racetrack_utilities import RacetrackUtilities
@@ -42,8 +42,8 @@ N_STEPS    = 10            # number of steps to forward-propagate
 REINIT_THRESHOLD = 2.0     # seconds; reinitialize KF if dt gap is too large
 
 # Coast / hold thresholds (seconds of silence since the last real observation)
-COAST_START_S  = 2.0   # begin coasting after this much silence
-COAST_GIVEUP_S = 40.0                # stop advancing after this much silence, then hold
+COAST_START_S  = 1.0   # begin coasting after this much silence
+COAST_GIVEUP_S = 20.0                # stop advancing after this much silence, then hold
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -106,7 +106,6 @@ class WrappedKalmanFilter(KalmanFilter):
         self.x_post = self.x.copy()
         self.P_post = self.P.copy()
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Filter factories
 # ──────────────────────────────────────────────────────────────────────────────
@@ -122,8 +121,8 @@ def make_s_cv_filter(dt: float, wrap_length: Optional[float] = None) -> WrappedK
                     [0,  0, 0]], dtype=float)
     f.H = np.array([[1, 0, 0]], dtype=float)
     f.P = np.eye(3)
-    f.R = np.eye(1)
-    f.Q = np.eye(3) * 0.0025   # scaled for CV model
+    f.R = np.eye(1) * 0.2
+    f.Q = np.eye(3) * 0.2  # scaled for CV model
     return f
 
 
@@ -139,8 +138,8 @@ def make_s_ca_filter(dt: float, wrap_length: Optional[float] = None) -> WrappedK
                     [0,  0,           1]], dtype=float)
     f.H = np.array([[1, 0, 0]], dtype=float)
     f.P = np.eye(3)
-    f.R = np.eye(1)
-    f.Q = np.eye(3) * 0.0025
+    f.R = np.eye(1) * 0.2
+    f.Q = np.eye(3)
     return f
 
 
@@ -154,9 +153,9 @@ def make_d_cd_filter(dt: float) -> KalmanFilter:
     f.F = np.array([[1, 0],
                     [0, 0]], dtype=float)
     f.H = np.array([[1, 0]], dtype=float)
-    f.P = np.eye(2)
-    f.R = np.eye(1)
-    f.Q = np.eye(2) * 0.025
+    f.P = np.eye(2) * 0.02
+    f.R = np.eye(1) * 0.0025
+    f.Q = np.eye(2) * 0.0025
     return f
 
 
@@ -170,9 +169,9 @@ def make_d_cv_filter(dt: float) -> KalmanFilter:
     f.F = np.array([[1, dt],
                     [0,  1]], dtype=float)
     f.H = np.array([[1, 0]], dtype=float)
-    f.P = np.eye(2)
-    f.R = np.eye(1)
-    f.Q = np.eye(2) * 0.025
+    f.P = np.eye(2) * 0.02
+    f.R = np.eye(1) * 0.0025
+    f.Q = np.eye(2) * 0.0025
     return f
 
 
@@ -395,7 +394,7 @@ class IMMFilterNode(Node):
         ]
         s_mu0 = np.array([0.8, 0.2])
         s_M   = np.array([[0.99, 0.01],
-                           [0.01, 0.99]])
+                           [0.10, 0.90]])
         self.s_imm = IMMAxis(s_filters, s_mu0, s_M, axis='s')
 
         # build d-axis IMM
@@ -412,6 +411,9 @@ class IMMFilterNode(Node):
         self._last_s      = None
         self._last_d      = None
 
+        self.last_ego_s   = None
+        self.last_ego_d   = None
+
         # coast / hold state
         self._last_obs_time = None    # node-clock stamp of the last real observation
         self._coasting      = False   # True while running predict-only steps
@@ -425,15 +427,41 @@ class IMMFilterNode(Node):
         self.pub = self.create_publisher(Path, '/imm_path', 10)
 
         self.cov_pub = self.create_publisher(Marker, '/imm_cov', 10)
+        
+        self.opp_pos_pub = self.create_publisher(Marker, '/starting_points', 10)
+        
+        self.ego_odom_sub = self.create_subscription(Odometry, '/ego_racecar/odom', self.ego_odom_cb, 10)
+
+        self.ego_ahead = False
+
+        self.ego_ahead_pub = self.create_publisher(Bool, '/ego_ahead', 10)
 
         # Wall-clock timer that drives coasting during observation silence.
         self.coast_timer = self.create_timer(PREDICT_DT, self._coast_tick)
-
+    
         self.get_logger().info('IMMFilterNode ready.')
 
     # ──────────────────────────────────────────────────────────────────────
     # Small state helpers
     # ──────────────────────────────────────────────────────────────────────
+    def ego_odom_cb(self, msg : Odometry):
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+
+        self.last_ego_s, self.last_ego_d = self.racetrack_utilities.convert_to_frenet(x, y)
+
+        if not self._last_s:
+            self.ego_ahead = False
+            return
+
+        if self.last_ego_s >= self._last_s:
+            self.ego_ahead = True
+        else:
+            self.ego_ahead = False
+
+
+        self.ego_ahead_pub.publish(Bool(data=self.ego_ahead))
+        
     def _reinit_from_obs(self, s, d):
         # type: (float, float) -> None
         """Cold-restart both IMM axes from a fresh (s, d) observation."""
@@ -442,12 +470,66 @@ class IMMFilterNode(Node):
         self._last_s = s
         self._last_d = d
 
+
     def _clear_coast_state(self):
         # type: () -> None
         """Return to normal operation: drop any coast/hold bookkeeping."""
         self._coasting    = False
         self._gave_up     = False
         self._frozen_path = None
+
+    def publish_sampled_points(self, s_mean, s_std, d_mean, d_std):
+        s_values = np.random.normal(loc=s_mean, scale=s_std, size=10)
+        d_values = np.random.normal(loc=d_mean, scale=min(1/2, d_std), size=10)
+        d_values = np.clip(d_values, -0.8, 0.8)
+        frenet_points = [(s_values[i], d_values[i]) for i in range(s_values.shape[0])]
+
+        filtered_points_frenet = []
+        for point in frenet_points:
+            if point[0] >= self._last_s and point[0] <= (self.last_ego_s - 0.1*(self.last_ego_s - self._last_s)):
+                filtered_points_frenet.append(point)
+        
+        cartesian_points = [tuple(self.racetrack_utilities.convert_to_cartesian(*frenet_point)) for frenet_point in filtered_points_frenet]
+
+        ego_x, ego_y = self.racetrack_utilities.convert_to_cartesian(self._last_s, self._last_d)
+
+
+        if len(cartesian_points) > 3:
+            cartesian_points.sort(key=lambda point : (point[0] - ego_x)**2 + (point[1] - ego_y)**2)
+            cartesian_points = cartesian_points[0:3]
+
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "opponent_state_estimate"
+        marker.id = 0
+        marker.type = Marker.POINTS
+        marker.action = Marker.ADD
+
+        marker.points =  []
+    
+        for x, y in cartesian_points:
+            new_point = Point()
+            new_point.x = x
+            new_point.y = y
+            new_point.z = 0.0
+            marker.points.append(new_point)
+
+        marker.scale.x = 0.25
+        marker.scale.y = 0.25
+        marker.scale.z = 0.25
+
+        marker.color.r = 0.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+        marker.color.a = 1.0
+        marker.lifetime = rclpy.duration.Duration(seconds=0.5).to_msg()
+
+        self.opp_pos_pub.publish(marker)
+        
+        
+
+        
 
     def publish_covariance(self):
         # variance of s and variance of d, then randomly sample, since s and d are not  correlated
@@ -534,6 +616,7 @@ class IMMFilterNode(Node):
         marker.lifetime = rclpy.duration.Duration(seconds=0.5).to_msg()
         
         self.cov_pub.publish(marker)
+        self.publish_sampled_points(s_mean, s_std, d_mean, d_std)
 
         return limits
 
@@ -587,6 +670,7 @@ class IMMFilterNode(Node):
     # ──────────────────────────────────────────────────────────────────────
     def _coast_tick(self):
         # type: () -> None
+        if not self.ego_ahead: return
         if not self._initialized or self._last_obs_time is None:
             return
 
@@ -617,7 +701,10 @@ class IMMFilterNode(Node):
         # ── Give up: freeze the last predicted path and keep republishing it. ──
         if not self._gave_up:
             self._gave_up     = True
-            self._frozen_path = self._last_path
+            #   self._frozen_path = self._last_path
+            self._last_s = None
+            self._last_d = None
+            self._frozen_path = None
             self.get_logger().warn(
                 'Coast bound reached (silence={:.2f}s) — holding last path.'.format(silence))
 
@@ -677,7 +764,6 @@ class IMMFilterNode(Node):
             predicted.append((float(state_s[0]), float(state_d[0])))
 
         return predicted
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Entry point

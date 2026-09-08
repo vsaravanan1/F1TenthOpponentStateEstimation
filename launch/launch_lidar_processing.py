@@ -45,6 +45,10 @@ def generate_launch_description():
         Node(package="lidar_processing",
              name="lstm_path_predictor",
              executable="lstm_path_predictor.py"
-        )           
+        ),
+        Node(package="lidar_processing",
+             name="candidate_trajectories",
+             executable="generate_candidate_trajectories.py"
+        )       
     ])
 

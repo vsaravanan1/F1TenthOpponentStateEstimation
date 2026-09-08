@@ -36,7 +36,7 @@ class IMMNode(Node):
         self.odom_sub = self.create_subscription(Odometry, '/opp_racecar/odom', self.odom_callback, 10)
         self.traj_pub = self.create_publisher(Path, '/imm_path_original', 10)
 
-        self.get_logger().info("🛡️ IMM Predictor Online")
+        self.get_logger().info("IMM Predictor Online")
 
     def create_kf_cv(self, dt):
         kf = KalmanFilter(dim_x=6, dim_z=2)

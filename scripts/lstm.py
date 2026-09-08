@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import numpy as np
 import torch
 import torch.nn as nn
@@ -10,9 +9,9 @@ from torch.utils.data import DataLoader, Dataset
 from racetrack_utilities.racetrack_utilities import RacetrackUtilities
 
 
-STALE_POSITION_EPS = 1e-6
-
 rutil = RacetrackUtilities("/sim_ws/src/lidar_processing/scripts/Spielberg_map.csv")
+
+STALE_POSITION_EPS = 1e-6
 
 # IMPORTANT: unwrap the data's Frenet s with the SAME period the geometry uses.
 # opp_s / ego_s in the logs must share the arc-length scale of this map, or the
@@ -24,7 +23,7 @@ TRACK_LENGTH = float(rutil.arclength)
 FAN_RESOLUTION = 1000      # stations over the whole track in the precomputed fan
 NUM_OFFSETS = 5            # lines in the fan
 SEG_POINTS = 20            # stations per extracted segment (must match the CNN)
-RELATIVE_S = True          # feed Delta s from segment start instead of absolute s
+RELATIVE_S = True          # only makes the FAN s relative, model s stays global
 
 
 def unwrap_s_values(values, track_length=TRACK_LENGTH):
@@ -54,12 +53,6 @@ class TrajectoryPoint:
 
 def parse_csv_to_points(csv_path):
     df = pd.read_csv(csv_path)
-
-    stale_position = (
-        np.isclose(df["opp_s"], df["opp_s"].shift(1), atol=STALE_POSITION_EPS, rtol=0.0)
-        & np.isclose(df["opp_d"], df["opp_d"].shift(1), atol=STALE_POSITION_EPS, rtol=0.0)
-    )
-    df = df.loc[~stale_position].copy().reset_index(drop=True)
 
     df["opp_s"] = unwrap_s_values(df["opp_s"].to_numpy())
     df["ego_s"] = unwrap_s_values(df["ego_s"].to_numpy())
@@ -94,27 +87,23 @@ def get_polyline_segments(fan, arclength, s_start, s_end,
     num_points : int
         Stations to resample to (fixed, so the CNN sees a constant length).
     relative_s : bool
-        If True the s channel is replaced by Delta s from s_start, making the
-        context translation-invariant along the track.
+        If True the FAN s channel is replaced by Delta s from s_start. This does
+        not change the global Frenet s values given to or predicted by the LSTM.
 
     Returns
     -------
     (B, P, num_points, 3) torch tensor.
-
-    Note: the window is resampled to `num_points` regardless of its physical
-    length, so a faster opponent (longer window) gets coarser station spacing.
-    The geometry is the same; only the sampling density changes.
     """
     P, N, _ = fan.shape
     device = fan.device
     s_start = s_start.to(device=device, dtype=fan.dtype)
     s_end = s_end.to(device=device, dtype=fan.dtype)
 
-    t = torch.linspace(0.0, 1.0, num_points, device=device, dtype=fan.dtype)     # (L,)
-    query_s = s_start[:, None] + (s_end - s_start)[:, None] * t[None, :]         # (B, L)
+    t = torch.linspace(0.0, 1.0, num_points, device=device, dtype=fan.dtype)       # (L,)
+    query_s = s_start[:, None] + (s_end - s_start)[:, None] * t[None, :]          # (B, L)
 
-    s_mod = torch.remainder(query_s, arclength)                                  # wrap into one lap
-    idx = (torch.round(s_mod / arclength * N).long()) % N                        # (B, L)
+    s_mod = torch.remainder(query_s, arclength)                                    # wrap into one lap
+    idx = (torch.round(s_mod / arclength * N).long()) % N                          # (B, L)
 
     seg = fan[:, idx, :]                          # (P, B, L, 3)
     seg = seg.permute(1, 0, 2, 3).contiguous()    # (B, P, L, 3)
@@ -131,7 +120,7 @@ def get_polyline_segments(fan, arclength, s_start, s_end,
 # -----------------------------
 
 class TrajectoryDataset(Dataset):
-    def __init__(self, points, history_len=15, future_len=40):
+    def __init__(self, points, history_len=15, future_len=10):
         self.points = points
         self.history_len = history_len
         self.future_len = future_len
@@ -146,35 +135,36 @@ class TrajectoryDataset(Dataset):
             future = self.points[start_idx + self.history_len: start_idx + self.history_len + self.future_len]
 
             x = []
-            for point in history:
-                x.append([point.opp_s, point.opp_d, point.ego_s, point.ego_d, point.ego_v])
+            for i, point in enumerate(history):
+                dt = 0.0 if i == 0 else point.t - history[i - 1].t
+                
+                x.append([point.opp_s, point.opp_d, point.ego_s, point.ego_d, point.ego_v, dt])
 
-            last_history_opp_s = history[-1].opp_s
-            last_history_opp_d = history[-1].opp_d
-
+            # Keep the FUTURE GLOBAL state. During recursive training:
+            #   - future opp_s / opp_d provide the true next global position
+            #   - the model itself predicts a one-step opponent delta
+            #   - future ego_s / ego_d / ego_v are still real inputs from ROS
             y = []
-            for point in future:
-                y.append([point.opp_s - last_history_opp_s,
-                          point.opp_d - last_history_opp_d])
 
-            # Window for the context fan: from the opponent's s at the START of
-            # the sample to an ESTIMATE of its s at the end of the future.
-            #
-            # s_end is a constant-velocity extrapolation of the opponent's
-            # current speed, taken from the last two history frames. It uses
-            # only information available at inference time -- no leakage of the
-            # true future position -- and matches the constant-velocity
-            # baseline's assumption.
-            #   Oracle version (leaks future speed): s_end = future[-1].opp_s
-            s_start = history[0].opp_s
-            opp_last_delta_s = history[-1].opp_s - history[-2].opp_s
-            s_end = history[-1].opp_s + self.future_len * opp_last_delta_s
+            previous_t = history[-1].t
+
+            for point in future:
+                dt = point.t - previous_t
+
+                y.append([
+                    point.opp_s,
+                    point.opp_d,
+                    point.ego_s,
+                    point.ego_d,
+                    point.ego_v,
+                    dt,
+                ])
+
+                previous_t = point.t
 
             samples.append((
                 np.array(x, dtype=np.float32),
                 np.array(y, dtype=np.float32),
-                np.float32(s_start),
-                np.float32(s_end),
             ))
         return samples
 
@@ -182,9 +172,8 @@ class TrajectoryDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        x, y, s_start, s_end = self.samples[idx]
-        return (torch.tensor(x), torch.tensor(y),
-                torch.tensor(s_start), torch.tensor(s_end))
+        x, y = self.samples[idx]
+        return torch.tensor(x), torch.tensor(y)
 
 
 # -----------------------------
@@ -216,10 +205,8 @@ class LSTMModel(nn.Module):
             nn.ReLU(),
         )
 
-        self.encoder_lstm1 = nn.LSTMCell(input_size=5 + n_context, hidden_size=n_hidden)
+        self.encoder_lstm1 = nn.LSTMCell(input_size=6 + n_context, hidden_size=n_hidden)
         self.encoder_lstm2 = nn.LSTMCell(input_size=n_hidden, hidden_size=n_hidden)
-        self.decoder_lstm1 = nn.LSTMCell(input_size=2 + n_context, hidden_size=n_hidden)
-        self.decoder_lstm2 = nn.LSTMCell(input_size=n_hidden, hidden_size=n_hidden)
         self.linear = nn.Linear(n_hidden, 2)
 
     def encode_polylines(self, segments):
@@ -228,14 +215,10 @@ class LSTMModel(nn.Module):
         seg = segments.permute(0, 1, 3, 2).reshape(B * P, F, L)   # (B*P, 3, L)
         emb = self.polyline_encoder(seg)                          # (B*P, per_poly)
         emb = emb.reshape(B, P * emb.shape[-1])                   # (B, P*per_poly)
-        return self.context_head(emb)                            # (B, n_context)
+        return self.context_head(emb)                             # (B, n_context)
 
-    def forward(self, x, polyline_segments, future=0):
-        """x: (B, history_len, 5); polyline_segments: (B, P, L, 3)."""
-        if future <= 0:
-            raise ValueError("future must be greater than zero")
-
-        outputs = []
+    def forward(self, x, polyline_segments):
+        """x: (B, history_len, 5); returns predicted [delta_s, delta_d]."""
         batch_size = x.size(0)
 
         context = self.encode_polylines(polyline_segments)   # (B, n_context)
@@ -245,23 +228,73 @@ class LSTMModel(nn.Module):
         h_t2 = x.new_zeros(batch_size, self.n_hidden)
         c_t2 = x.new_zeros(batch_size, self.n_hidden)
 
-        # Encode history, concatenating the (static) context at every timestep.
+        # Encode the entire current history every time the model is called.
         for input_t in x.unbind(dim=1):
             enc_in = torch.cat([input_t, context], dim=1)        # (B, 5 + n_context)
             h_t, c_t = self.encoder_lstm1(enc_in, (h_t, c_t))
             h_t2, c_t2 = self.encoder_lstm2(h_t, (h_t2, c_t2))
 
-        output = self.linear(h_t2)
+        # ONE-STEP opponent displacement.
+        # Inputs stay in global Frenet coordinates; only the output is a delta.
+        return self.linear(h_t2)                                 # (B, 2) [delta_s, delta_d]
 
-        # Autoregressive decode, also conditioned on the context each step.
-        for _ in range(future):
-            dec_in = torch.cat([output, context], dim=1)         # (B, 2 + n_context)
-            h_t, c_t = self.decoder_lstm1(dec_in, (h_t, c_t))
-            h_t2, c_t2 = self.decoder_lstm2(h_t, (h_t2, c_t2))
-            output = self.linear(h_t2)
-            outputs.append(output)
 
-        return torch.stack(outputs, dim=1)
+# -----------------------------
+# AUTOMATIC ROLLOUT CURRICULUM
+# -----------------------------
+
+def get_rollout_len(epoch):
+    """Automatically increase recursive training difficulty as training progresses."""
+    if epoch < 20:
+        return 1
+    elif epoch < 40:
+        return 3
+    elif epoch < 60:
+        return 5
+    else:
+        return 10
+
+
+# -----------------------------
+# RECURSIVE ROLLOUT
+# -----------------------------
+
+def recursive_rollout(model, x, y, fan, arclength):
+    """Repeatedly predict one-step opponent deltas, convert them back to global
+    positions, and feed those global predictions into the next history window."""
+    history = x
+    outputs = []
+
+    for step in range(y.shape[1]):
+        # Rebuild the racetrack context from the CURRENT history. The context
+        # extends from the oldest opponent s to one estimated step ahead.
+        s_start = history[:, 0, 0]
+        opp_last_delta_s = history[:, -1, 0] - history[:, -2, 0]
+        s_end = history[:, -1, 0] + opp_last_delta_s
+        segments = get_polyline_segments(fan, arclength, s_start, s_end)
+
+        # The network predicts how far the opponent moves from the CURRENT
+        # global opponent position in the history.
+        pred_delta = model(history, segments)             # [delta_s, delta_d]
+
+        current_opp = history[:, -1, 0:2]
+        pred_global = current_opp + pred_delta             # global [opp_s, opp_d]
+        outputs.append(pred_global)
+
+        # Opponent position is predicted, but ego state is still ground truth
+        # because ROS will continue providing ego_s, ego_d, and ego_v.
+        next_ego_and_dt = y[:, step, 2:6]
+
+        next_input = torch.cat([
+            pred_global,
+            next_ego_and_dt,
+        ], dim=1)
+
+        # Drop the oldest point and append the new GLOBAL predicted position
+        # for the next LSTM call.
+        history = torch.cat([history[:, 1:, :], next_input.unsqueeze(1)], dim=1)
+
+    return torch.stack(outputs, dim=1)                    # (B, future_len, 2)
 
 
 # -----------------------------
@@ -278,22 +311,27 @@ if __name__ == "__main__":
     fan_np, d_values = rutil.precompute_fan(
         num_points_total=FAN_RESOLUTION, num_offsets=NUM_OFFSETS
     )
-    fan_t = torch.tensor(fan_np, device=device)      # (P, N, 3)
+    fan_t = torch.tensor(fan_np, dtype=torch.float32, device=device)   # (P, N, 3)
     arclength = float(rutil.arclength)
     print(f"Fan: {tuple(fan_t.shape)}  offsets={np.round(d_values, 3)}  arclength={arclength:.2f}")
 
-    csv_path = "Richard_data_no_reset/session_1_data.csv"
-    val_csv_path = "Richard_data_no_reset/session_3_data.csv"
+    csv_path = "fixed_data/session_1_data_fixed.csv"
+    val_csv_path = "fixed_data/session_3_data_fixed.csv"
     points = parse_csv_to_points(csv_path)
     val_points = parse_csv_to_points(val_csv_path)
 
-    dataset = TrajectoryDataset(points, history_len=15, future_len=40)
-    val_dataset = TrajectoryDataset(val_points, history_len=15, future_len=40)
+    # Keep 10 future ground-truth states available. The training curriculum below
+    # automatically decides how many recursive steps to use at each epoch.
+    dataset = TrajectoryDataset(points, history_len=15, future_len=10)
+    val_dataset = TrajectoryDataset(val_points, history_len=15, future_len=10)
 
     use_cuda = device.type == "cuda"
     dataloader = DataLoader(dataset, batch_size=128, shuffle=True, pin_memory=use_cuda)
     val_dataloader = DataLoader(val_dataset, batch_size=128, shuffle=False, pin_memory=use_cuda)
 
+    # Global inputs -> one-step opponent delta output.
+    # Each predicted delta is immediately added to the current global opponent
+    # position before being fed back into the recursive history.
     model = LSTMModel().to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -302,38 +340,77 @@ if __name__ == "__main__":
     )
     n_steps = 100
     best_val_loss = float('inf')
-    save_path = "context_best_model.pt"
+    save_path = "singleposbestmodel.pt"
+    previous_rollout_len = None
 
     for i in range(n_steps):
+        rollout_len = get_rollout_len(i)
+
+        # A new rollout length is a new training stage. Reset the stage-specific
+        # best validation loss and LR scheduler, but KEEP the trained model and
+        # optimizer weights/momentum.
+        if rollout_len != previous_rollout_len:
+            print(f"\n=== Starting {rollout_len}-step rollout stage at epoch {i} ===")
+            best_val_loss = float('inf')
+            scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-6
+            )
+            previous_rollout_len = rollout_len
         model.train()
         total_loss = 0.0
-        for x_batch, y_batch, s_start, s_end in dataloader:
+
+        for x_batch, y_batch in dataloader:
             x_batch = x_batch.to(device, non_blocking=True)
             y_batch = y_batch.to(device, non_blocking=True)
-            segments = get_polyline_segments(fan_t, arclength, s_start, s_end)
 
             optimizer.zero_grad()
-            pred = model(x_batch, segments, future=y_batch.shape[1])
-            loss = criterion(pred, y_batch)
+
+            # Automatically use 1, 3, 5, or 10 recursive predictions depending
+            # on the current training stage. The model predicts one-step deltas;
+            # recursive_rollout converts each delta back to a global position.
+            rollout_y = y_batch[:, :rollout_len, :]
+            pred = recursive_rollout(model, x_batch, rollout_y, fan_t, arclength)
+            target = rollout_y[:, :, 0:2]
+            loss = criterion(pred, target)
+
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
             total_loss += loss.item() * x_batch.size(0)
 
         total_loss /= len(dataset)
-        print(f"Training Loss for Epoch {i}: {total_loss}")
+        print(f"Training Loss for Epoch {i} ({rollout_len}-step rollout): {total_loss}")
 
         model.eval()
         val_loss = 0.0
+        one_step_val_loss = 0.0
         with torch.no_grad():
-            for x_batch, y_batch, s_start, s_end in val_dataloader:
+            for x_batch, y_batch in val_dataloader:
                 x_batch = x_batch.to(device, non_blocking=True)
                 y_batch = y_batch.to(device, non_blocking=True)
-                segments = get_polyline_segments(fan_t, arclength, s_start, s_end)
-                pred = model(x_batch, segments, future=y_batch.shape[1])
-                val_loss += criterion(pred, y_batch).item() * x_batch.size(0)
+
+                # Current curriculum-stage recursive validation.
+                rollout_y = y_batch[:, :rollout_len, :]
+                pred = recursive_rollout(model, x_batch, rollout_y, fan_t, arclength)
+                target = rollout_y[:, :, 0:2]
+                val_loss += criterion(pred, target).item() * x_batch.size(0)
+
+                # Also track the immediate next-position error every epoch so we
+                # can see whether basic one-step accuracy is being preserved.
+                one_step_pred = pred[:, 0, :]
+                one_step_target = y_batch[:, 0, 0:2]
+                one_step_val_loss += criterion(
+                    one_step_pred, one_step_target
+                ).item() * x_batch.size(0)
+
         val_loss /= len(val_dataset)
-        print(f"Validation Loss for Epoch {i}: {val_loss}")
+        one_step_val_loss /= len(val_dataset)
+
+        print(
+            f"Validation Loss for Epoch {i} "
+            f"({rollout_len}-step rollout): {val_loss}"
+        )
+        print(f"One-step Validation Loss: {one_step_val_loss}")
 
         scheduler.step(val_loss)
         print(f"Learning rate: {optimizer.param_groups[0]['lr']:.8f}")
@@ -342,47 +419,56 @@ if __name__ == "__main__":
             torch.save(model.state_dict(), save_path)
             print(f"New best model saved (val loss {val_loss: .4f})")
 
-    # ---- Baselines (do not use the model, unchanged) ----
+    # ---- One-step constant-position baseline ----
     baseline_loss = 0.0
     with torch.no_grad():
-        for x_batch, y_batch, s_start, s_end in val_dataloader:
+        for x_batch, y_batch in val_dataloader:
+            x_batch = x_batch.to(device, non_blocking=True)
             y_batch = y_batch.to(device, non_blocking=True)
-            baseline_pred = torch.zeros_like(y_batch)
-            baseline_loss += criterion(baseline_pred, y_batch).item() * y_batch.size(0)
+            target = y_batch[:, 0, 0:2]
+
+            baseline_pred = x_batch[:, -1, 0:2]
+            baseline_loss += criterion(baseline_pred, target).item() * y_batch.size(0)
+
     baseline_loss /= len(val_dataset)
     print(f"Constant-position baseline: {baseline_loss}")
 
+    # ---- One-step constant-velocity baseline ----
     constant_velocity_loss = 0.0
     with torch.no_grad():
-        for x_batch, y_batch, s_start, s_end in val_dataloader:
+        for x_batch, y_batch in val_dataloader:
             x_batch = x_batch.to(device, non_blocking=True)
             y_batch = y_batch.to(device, non_blocking=True)
+            target = y_batch[:, 0, 0:2]
+
+            last_position = x_batch[:, -1, 0:2]
             last_delta = x_batch[:, -1, 0:2] - x_batch[:, -2, 0:2]
-            future_steps = torch.arange(
-                1, y_batch.shape[1] + 1, dtype=x_batch.dtype, device=x_batch.device
-            ).view(1, -1, 1)
-            baseline_pred = future_steps * last_delta.unsqueeze(1)
-            constant_velocity_loss += criterion(baseline_pred, y_batch).item() * x_batch.size(0)
+            baseline_pred = last_position + last_delta
+
+            constant_velocity_loss += criterion(baseline_pred, target).item() * x_batch.size(0)
+
     constant_velocity_loss /= len(val_dataset)
     print(f"Constant-velocity baseline: {constant_velocity_loss}")
 
-    # ---- Per-axis error metrics (model) ----
+    # ---- Per-axis error metrics (final 10-step recursive rollout) ----
     with torch.no_grad():
         total_s_sq = total_d_sq = total_s_abs = total_d_abs = 0.0
         total_values = 0
-        for x_batch, y_batch, s_start, s_end in val_dataloader:
+
+        for x_batch, y_batch in val_dataloader:
             x_batch = x_batch.to(device, non_blocking=True)
             y_batch = y_batch.to(device, non_blocking=True)
-            segments = get_polyline_segments(fan_t, arclength, s_start, s_end)
-            pred = model(x_batch, segments, future=y_batch.shape[1])
 
-            s_error = pred[:, :, 0] - y_batch[:, :, 0]
-            d_error = pred[:, :, 1] - y_batch[:, :, 1]
+            pred = recursive_rollout(model, x_batch, y_batch, fan_t, arclength)
+            target = y_batch[:, :, 0:2]
+
+            s_error = pred[:, :, 0] - target[:, :, 0]
+            d_error = pred[:, :, 1] - target[:, :, 1]
             total_s_sq += torch.sum(s_error ** 2).item()
             total_d_sq += torch.sum(d_error ** 2).item()
             total_s_abs += torch.sum(torch.abs(s_error)).item()
             total_d_abs += torch.sum(torch.abs(d_error)).item()
-            total_values += y_batch.shape[0] * y_batch.shape[1]
+            total_values += target.shape[0] * target.shape[1]
 
         print(f"Validation s RMSE: {np.sqrt(total_s_sq / total_values):.6f}")
         print(f"Validation d RMSE: {np.sqrt(total_d_sq / total_values):.6f}")

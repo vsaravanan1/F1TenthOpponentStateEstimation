@@ -97,6 +97,7 @@ install(PROGRAMS
   scripts/interceptor.py
   scripts/Overtake.py
   scripts/lstm.py
+  scripts/generate_candidate_trajectories.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
