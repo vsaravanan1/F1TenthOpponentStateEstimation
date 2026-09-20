@@ -76,6 +76,9 @@ class OpponentIntentPredictor(Node):
         self.last_publish_time = current_time
 
 
+    def generate_opponent_splines_rrt(self, starting_points: list):
+        pass
+
     def generate_opponent_splines(self, starting_points: list):
         d_traj_candidates = np.linspace(-0.9, 0.9, 5)
         threat_paths = []
@@ -97,7 +100,7 @@ class OpponentIntentPredictor(Node):
                     [s_opp + (1/3)*(s_ego - s_opp), d_traj],
                     [s_opp + (2/3)*(s_ego - s_opp), d_traj],
                     [s_ego, d_traj],
-                    [s_ego + (2/3)*(s_ego - s_opp), (d_traj + d_ego)/2.0] 
+                    [s_ego + 3, d_traj] 
                 ])
 
                 spline_s, spline_d = self.create_bspline(P)
@@ -137,10 +140,9 @@ class OpponentIntentPredictor(Node):
         for d_traj in d_traj_candidates:
             P = np.array([
                 [s_ego, d_ego],
-                [s_ego + 0.25, d_ego + 0.5 * (d_traj - d_ego)],
-                [s_ego + 0.5, d_traj],
-                [s_ego + 1.0, d_traj],
-                [s_ego + 1.5, d_traj],
+                [s_ego + 0.5, d_ego],
+                [s_ego + 1.0, d_ego],
+                [s_ego + 1.5, d_ego + 0.5*(d_traj - d_ego)],
                 [s_ego + 2.0, d_traj]
             ])
 

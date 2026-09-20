@@ -37,12 +37,22 @@ find_package(PCL REQUIRED COMPONENTS common kdtree segmentation filters)
 find_package(geometry_msgs REQUIRED)
 find_package(ackermann_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
+find_package(pybind11_vendor REQUIRED)
+find_package(pybind11 REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(eigen3_cmake_module REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(message_filters REQUIRED)
 
 # =====================
 # Python package install
 # =====================
 ament_python_install_package(${PROJECT_NAME})
 ament_python_install_package(racetrack_utilities)
+ament_python_install_package(f1tenth_mppi)
 
 # =====================
 # Includes
@@ -50,6 +60,11 @@ ament_python_install_package(racetrack_utilities)
 include_directories(
   include
   ${PCL_INCLUDE_DIRS}
+)
+
+include_directories(include)
+include_directories(
+  ${EIGEN3_INCLUDE_DIRS}
 )
 
 add_definitions(${PCL_DEFINITIONS})
@@ -76,6 +91,23 @@ ament_target_dependencies(bounding_box
   tf2_sensor_msgs
 )
 
+add_executable(mppi_node src/mppi_node.cpp src/utils.cpp src/dynamics_models.cpp)
+
+ament_target_dependencies(mppi_node 
+  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs visualization_msgs tf2_ros message_filters
+)
+
+# add_executable(rrt_mppi src/ego_rrt_mppi.cpp)
+# ament_target_dependencies(rrt_mppi
+#   rclcpp
+#   std_msgs
+#   nav_msgs
+# )
+
+# target_link_libraries(rrt_mppi
+#   pybind11::embed
+#   Eigen3::Eigen
+# )
 
 # =====================
 # Install targets
@@ -83,6 +115,7 @@ ament_target_dependencies(bounding_box
 install(TARGETS
   scan_to_cloud
   bounding_box
+  # rrt_mppi
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -92,15 +125,20 @@ install(PROGRAMS
   scripts/clustering_rf.py
   scripts/spielberg_centerline_publisher.py
   scripts/frenet_opp_state.py
-  scripts/lstm_path_predictor.py
+  # scripts/lstm_path_predictor.py
   scripts/imm_filterpy.py
   scripts/interceptor.py
   scripts/Overtake.py
-  scripts/lstm.py
+  # scripts/lstm.py
   scripts/generate_candidate_trajectories.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
+# Install Python executables
+install(PROGRAMS
+  scripts/mppi_node_new.py
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 # =====================
 # Testing

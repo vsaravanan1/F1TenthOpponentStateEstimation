@@ -62,6 +62,64 @@ class RacetrackUtilities:
         d_signed = np.sign(np.dot(diff, normal)) * d
         return np.array([s, d_signed])
 
+    def convert_to_cartesian_arr(self, s_arr, d_arr):
+        """Vectorized convert_to_cartesian.
+
+        Parameters
+        ----------
+        s_arr : (N,) array-like  – arc-length positions along the centerline
+        d_arr : (N,) array-like  – signed lateral offsets (positive = left)
+
+        Returns
+        -------
+        xy : (N, 2) ndarray  – Cartesian [x, y] for each (s, d) pair
+        """
+        s_arr = np.asarray(s_arr, dtype=float)
+        d_arr = np.asarray(d_arr, dtype=float)
+
+        s_norm = np.clip(s_arr / self.arclength, 0.0, 1.0)
+
+        cx, cy = splev(s_norm, self.centerline_spline, der=0)
+        dx, dy = splev(s_norm, self.centerline_spline, der=1)
+
+        mag = np.hypot(dx, dy)
+        nx = -dy / mag   # left-pointing normal, matching _get_normal
+        ny =  dx / mag
+
+        x = cx + d_arr * nx
+        y = cy + d_arr * ny
+        return np.column_stack([x, y])
+
+    def convert_to_frenet_arr(self, xy_arr):
+        """Vectorized convert_to_frenet.
+
+        Parameters
+        ----------
+        xy_arr : (N, 2) array-like  – Cartesian [x, y] query points
+
+        Returns
+        -------
+        sd : (N, 2) ndarray  – Frenet [s, d_signed] for each input point
+        """
+        xy_arr = np.asarray(xy_arr, dtype=float)
+
+        distances, indices = self.centerline_tree.query(xy_arr)   # (N,), (N,)
+
+        s_norm = self.centerline_s_norm[indices]                  # (N,)
+        s      = s_norm * self.arclength                          # (N,)
+
+        dx, dy = splev(s_norm, self.centerline_spline, der=1)
+        mag    = np.hypot(dx, dy)
+        nx     = -dy / mag                                        # (N,)
+        ny     =  dx / mag
+
+        diff          = xy_arr - self.centerline[indices]         # (N, 2)
+        dot_products  = diff[:, 0] * nx + diff[:, 1] * ny        # (N,)
+        d_signed      = np.sign(dot_products) * distances         # (N,)
+
+        return np.column_stack([s, d_signed])
+
+
     def curvature(self, s_norm):
         """Signed centerline curvature at normalized arc length s_norm in [0, 1].
         Positive for a left (CCW) turn. Accepts scalar or array."""

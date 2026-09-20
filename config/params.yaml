@@ -1,0 +1,33 @@
+MPPI:
+  ros__parameters:
+    visualize: True
+    waypoint_path: "Spielberg_mppi_waypoints_sparse.csv"
+    vehicle_frame: "ego_racecar/base_link"
+
+    # Publisher Parameters
+    drive_topic: "/drive"
+    occupancy_topic: "/occupancy"
+    marker_topic: "/trajectory"
+
+    # Subscriber Parameters
+    pose_topic: "/ego_racecar/odom"
+    scan_topic: "/scan"
+
+    # Model Parameters
+    wheelbase: 0.33 # Wheelbase (m)
+    min_throttle: 0.75 # Minimum throttle (m/s)
+    max_throttle: 1.0 # Maximum throttle (m/s)
+    max_steer: 0.3 # Maximum steer (rad)
+    dt: 0.1 # Timestep (s)
+
+    # MPPI Parameters
+    num_trajectories: 100
+    steps_trajectories: 25
+    v_sigma: 0.05
+    omega_sigma: 0.2
+    lambda: 10
+
+    # Cost Map Parameters
+    cost_map_width: 100
+    cost_map_res: 0.05
+    occupancy_dilation: 10

@@ -42,10 +42,10 @@ def generate_launch_description():
              name="imm_original",
              executable="imm_filterpy.py"
         ),
-        Node(package="lidar_processing",
-             name="lstm_path_predictor",
-             executable="lstm_path_predictor.py"
-        ),
+        # Node(package="lidar_processing",
+        #      name="lstm_path_predictor",
+        #      executable="lstm_path_predictor.py"
+        # ),
         Node(package="lidar_processing",
              name="candidate_trajectories",
              executable="generate_candidate_trajectories.py"
