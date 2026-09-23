@@ -42,11 +42,6 @@ class CenterlinePublisherNode(Node):
 
         s, d = self.racetrack.convert_to_frenet(x, y)
 
-        if self.racetrack.in_bounds_frenet(s, d):
-            self.get_logger().info(f"s={s:.2f}m  d={d:.2f}m")
-        else:
-            self.get_logger().warning(f"Out of bounds! s={s:.2f}m  d={d:.2f}m")
-
     def raceline_pub_cb(self):
         self.raceline_publisher.publish(self.published_path)
 

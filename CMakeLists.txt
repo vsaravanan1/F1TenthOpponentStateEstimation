@@ -52,6 +52,7 @@ find_package(message_filters REQUIRED)
 # =====================
 ament_python_install_package(${PROJECT_NAME})
 ament_python_install_package(racetrack_utilities)
+ament_python_install_package(rrt_planner)
 ament_python_install_package(f1tenth_mppi)
 
 # =====================

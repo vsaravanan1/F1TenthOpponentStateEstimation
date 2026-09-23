@@ -42,7 +42,7 @@ N_STEPS    = 10            # number of steps to forward-propagate
 REINIT_THRESHOLD = 2.0     # seconds; reinitialize KF if dt gap is too large
 
 # Coast / hold thresholds (seconds of silence since the last real observation)
-COAST_START_S  = 1.0   # begin coasting after this much silence
+COAST_START_S  = 0.5   # begin coasting after this much silence
 COAST_GIVEUP_S = 20.0                # stop advancing after this much silence, then hold
 
 
@@ -528,11 +528,8 @@ class IMMFilterNode(Node):
         self.opp_pos_pub.publish(marker)
         
         
-
-        
-
     def publish_covariance(self):
-        # variance of s and variance of d, then randomly sample, since s and d are not  correlated
+        # variance of s and variance of d, then randomly sample, since s and d are not correlated
         cov_matrices_s = [filt.P for filt in self.s_imm.filters]
         cov_matrices_d = [filt.P for filt in self.d_imm.filters]
         states_s = self.s_imm.xs

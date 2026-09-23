@@ -9,6 +9,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 from racetrack_utilities.racetrack_utilities import RacetrackUtilities
 from scipy.interpolate import BSpline
+from rrt_planner.rrt_planner import RRTStarPlanner, NodeRRT
 
 class OpponentIntentPredictor(Node):
     def __init__(self):
@@ -57,7 +58,7 @@ class OpponentIntentPredictor(Node):
 
         starting_points = msg.points
 
-        threat_paths, opponent_time_paths = self.generate_opponent_splines(starting_points)
+        threat_paths, opponent_time_paths = self.generate_opponent_splines_rrt(starting_points)
         ego_paths, ego_time_paths = self.generate_ego_lane_possibilities()
 
         self.publish_threat_markers(threat_paths)
@@ -77,8 +78,37 @@ class OpponentIntentPredictor(Node):
 
 
     def generate_opponent_splines_rrt(self, starting_points: list):
-        pass
+        d_traj_candidates = np.linspace(-0.7, 0.7, 2)
+        threat_paths = []
+        opponent_time_paths = []
 
+        for point in starting_points:
+            s_opp, d_opp = self.rutil.convert_to_frenet(point.x, point.y)
+            s_ego, d_ego = self.rutil.convert_to_frenet(self.ego_x, self.ego_y) 
+            obstacles = [(s_ego, d_ego)]
+            planner = RRTStarPlanner(obstacles, 200, 0.1, 0.5)
+
+            # paths arrays
+            point_paths = []
+            point_time_paths = []
+
+            for d_traj in d_traj_candidates:
+                course = planner.plan_rrt(NodeRRT(s_opp, d_opp), NodeRRT(s_ego + 2, d_traj), 0.2)
+                if course is not None:
+                    spline_s, spline_d = self.create_bspline(course)
+                    t_values = np.linspace(0.0, 1.0, self.path_resolution)
+                    spline_points_cart = self.rutil.convert_to_cartesian_arr(spline_s(t_values), spline_d(t_values)).tolist()
+                    time_path = self.reparameterize_spline(spline_s, spline_d, self.opponent_velocity)
+
+                    point_paths.append(spline_points_cart)
+                    point_time_paths.append(time_path)
+
+            threat_paths.append(point_paths)
+            opponent_time_paths.append(point_time_paths)
+
+        return threat_paths, opponent_time_paths
+
+    
     def generate_opponent_splines(self, starting_points: list):
         d_traj_candidates = np.linspace(-0.9, 0.9, 5)
         threat_paths = []
