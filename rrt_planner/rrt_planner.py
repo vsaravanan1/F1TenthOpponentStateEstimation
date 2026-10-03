@@ -1,169 +1,169 @@
 #!/usr/bin/env python3
-
 import math
-import random
+import time
 import numpy as np
-import rclpy
-from rclpy.node import Node
-from nav_msgs.msg import Path, Odometry
-from geometry_msgs.msg import PoseStamped
-from sensor_msgs.msg import LaserScan
-from visualization_msgs.msg import Marker
-from std_msgs.msg import String
-from scipy.interpolate import splprep, splev
-from scipy.spatial import KDTree
-from racetrack_utilities.racetrack_utilities import RacetrackUtilities
 
-class NodeRRT:
-    def __init__(self, s, d):
-        self.s = s
-        self.d = d
-        self.parent = None
-        self.cost = 0.0
 
 class RRTStarPlanner:
-    def __init__(self, obstacles : list, max_iter=600, path_resolution = 0.1, clearance = 0.5):
-        self.obstacles = obstacles
+    def __init__(self, obstacles=(), max_iter=300, d_limit=0.8, d_clear = 0.5,
+                 time_budget=0.015, goal_bias=0.2, seed=None):
+        self.set_obstacles(obstacles)
         self.max_iter = max_iter
-        self.path_resolution = path_resolution
-        self.clearance = clearance
+        self.d_limit = d_limit
+        self.time_budget = time_budget
+        self.goal_bias = goal_bias
+        self.rng = np.random.default_rng(seed)
+        self.d_clear = d_clear
 
-        map_csv_path = "/sim_ws/src/lidar_processing/scripts/Spielberg_map.csv"
-        self.rutil = RacetrackUtilities(map_csv_path)
-        
-    def get_nearest_node_index(self, node_list, rnd_node):
-        dlist = [(node.s - rnd_node.s)**2 + (node.d - rnd_node.d)**2 for node in node_list]
-        return dlist.index(min(dlist))
+    def set_obstacles(self, obstacles):
+        """obstacles: iterable of (s, d) points."""
+        self.obstacles = np.asarray(obstacles, dtype=float).reshape(-1, 2)
 
-    def get_random_node(self, start, goal):
-        bounds = [
-            (start.s, goal.s), (-0.8, 0.8)
-        ]
+    # ------------------------------------------------------------------
+    def _segment_free(self, p0, p1, s_clear):
+        for i, obstacle in enumerate(self.obstacles):
+            s, d = obstacle
+            min_s = s - 0.5
+            max_s = s + s_clear
+            min_d = np.clip(d - self.d_clear, -1.0, 1.0)
+            max_d = np.clip(d + self.d_clear, -1.0, 1.0)
+            
+            p0_s, p0_d = p0
+            p1_s, p1_d = p1
 
-        rng = np.random.default_rng()
-        rand_s, rand_d = rng.uniform(low=bounds[0][0], high=bounds[0][1]), rng.uniform(low=bounds[1][0], high=bounds[1][1])
+            free_conditions = [
+                p0_s < min_s and p1_s < min_s,
+                p0_s > max_s and p1_s > max_s,
+                p0_d < min_d and p1_d < min_d,
+                p0_d > max_d and p1_d > max_d
+            ]
 
-        rrt_node = NodeRRT(rand_s, rand_d)
-        return rrt_node
+            if (any(free_conditions)):
+                continue
 
-    def steer(self, from_node, to_node, extend_s=float("inf")):
-        new_node = NodeRRT(from_node.s, from_node.d)
-        s_diff = to_node.s - from_node.s
-        d_diff = to_node.d - from_node.d
+            if abs(p1_s - p0_s) < 1e-12 or abs(p1_d - p0_d) < 1e-12: return False
 
+            # Slab check for box-segment intersection
+            t_low = 0.0
+            t_high = 1.0
 
-        extend_s = min(s_diff, extend_s)
-        scale = extend_s / s_diff
-        extend_d = scale * d_diff
+            t_a = (min_s - p0_s)/(p1_s - p0_s)
+            t_b = (max_s - p0_s)/(p1_s - p0_s)
 
-        new_node.s += extend_s
-        new_node.d += extend_d
-        new_node.parent = from_node
-        new_node.cost = from_node.cost + extend_s + extend_d
+            t_low = max(t_low, min(t_a, t_b))
+            t_high = min(t_high, max(t_a, t_b))
+            
+            t_a = (min_d - p0_d)/(p1_d - p0_d)
+            t_b = (max_d - p0_d)/(p1_d - p0_d)
 
-        return new_node
+            t_low = max(t_low, min(t_a, t_b))
+            t_high = min(t_high, max(t_a, t_b))
 
-    def get_clearance(self, s, d):
-        dists = []
-        for obs in self.obstacles:
-            obs_s, obs_d = obs
-            dist = math.sqrt((obs_s - s)**2 + (obs_d - d)**2)
-            dists.append(dist)
-        return min(dists)
-    
-
-    def check_collision_segment(self, nearest_node, new_node):
-        num_steps = int((new_node.s - nearest_node.s)//self.path_resolution)
-        for i in range(num_steps):
-            candidate_s = nearest_node.s + i * (new_node.s - nearest_node.s)/num_steps
-            candidate_d = nearest_node.d + i * (new_node.d - nearest_node.d)/num_steps
-            clear = self.get_clearance(candidate_s, candidate_d) >= self.clearance
-            if not clear:
+            if t_low <= t_high:
                 return False
+            
         return True
 
-    def find_near_nodes(self, new_node):
-        nnode = len(self.node_list) + 1
-        r = 1.5 * self.step_size * math.sqrt(math.log(nnode) / nnode)
-        dlist = [(node.s - new_node.s)**2 + (node.d - new_node.d)**2 for node in self.node_list]
-        return [i for i, d in enumerate(dlist) if d <= r**2]
+    # ------------------------------------------------------------------
+    def plan(self, start, goals, s_clear, step=1.0):
+        """
+        start: (s, d)
+        goals: (G, 2) array of (s, d)
+        returns: list of length G; each entry is an (N, 2) array from start to
+                 goal, or None if that goal could not be connected.
+        """
+        start = np.asarray(start, dtype=float)
+        goals = np.asarray(goals, dtype=float).reshape(-1, 2)
 
-    def rewire(self, new_node, near_inds):
-        for i in near_inds:
-            near_node = self.node_list[i]
-            s_diff = abs(new_node.s - near_node.s)
-            d_diff = abs(new_node.d - near_node.d)
-            scost = new_node.cost + s_diff + d_diff
-            if near_node.cost > scost and self.check_collision_segment(near_node, new_node):
-                near_node.parent = new_node
-                near_node.cost = scost
-    
-    def choose_parent(self, new_node, near_inds):
-        if not near_inds: return new_node
-        costs = []
-        for i in near_inds:
-            near_node = self.node_list[i]
-            if self.check_collision_segment(near_node, new_node):
-                s_diff, d_diff = abs(near_node.s - new_node.s), abs(near_node.d - new_node.d)
-                costs.append(near_node.cost + s_diff + d_diff)
-            else:
-                costs.append(float("inf"))
-        min_cost = min(costs)
-        if min_cost == float("inf"): return None
-        min_ind = near_inds[costs.index(min_cost)]
-        new_node.parent = self.node_list[min_ind]
-        new_node.cost = min_cost
-        return new_node
+        cap = self.max_iter + 1
+        S = np.empty((cap, 2))
+        parent = np.full(cap, -1, dtype=int)
+        cost = np.zeros(cap)
+        S[0] = start
+        n = 1
 
-    def search_best_goal_node(self):
-        dist_to_goal = [(n.s - self.end.s)**2 + (n.d - self.end.d)**2 for n in self.node_list]
-        goal_inds = [i for i, d in enumerate(dist_to_goal) if d <= self.step_size**2]
-        if not goal_inds:
-            return None
-        safe_goal_inds = []
-        for i in goal_inds:
-            if self.check_collision_segment(self.node_list[i], self.end):
-                safe_goal_inds.append(i)
-        if not safe_goal_inds:
-            return None
-        min_cost = min([self.node_list[i].cost for i in safe_goal_inds])
-        return safe_goal_inds[[self.node_list[i].cost for i in safe_goal_inds].index(min_cost)]
+        s_hi = float(goals[:, 0].max())
+        if s_hi <= start[0]:
+            return [None] * len(goals)
 
-    def generate_final_course(self, last_idx):
-        path = [self.node_list[last_idx]]
-        curr = self.node_list[last_idx]
-        while curr.parent != None:
-            curr = curr.parent
-            path.append(curr)
-        path = path[::-1]
-        return path
-        
-
-    def plan_rrt(self, start, goal, step_size) -> np.ndarray:
-        self.start = start
-        self.end = goal
-        self.step_size = step_size
-        self.node_list = [self.start]
+        deadline = time.perf_counter() + self.time_budget
 
         for _ in range(self.max_iter):
-            rnd = self.get_random_node(self.start, self.end)
-            nearest_ind = self.get_nearest_node_index(self.node_list, rnd)
-            nearest_node = self.node_list[nearest_ind]
-            
-            new_node = self.steer(nearest_node, rnd, self.step_size)
-            
-            if self.check_collision_segment(nearest_node, new_node):
-                near_inds = self.find_near_nodes(new_node)
-                new_node = self.choose_parent(new_node, near_inds)
-                if new_node:
-                    self.node_list.append(new_node)
-                    self.rewire(new_node, near_inds)
+            if time.perf_counter() > deadline:
+                break
 
-        last_idx = self.search_best_goal_node()
+            # sample (with goal bias)
+            if self.rng.random() < self.goal_bias:
+                rnd = goals[self.rng.integers(len(goals))]
+            else:
+                rnd = np.array([self.rng.uniform(start[0], s_hi),
+                                self.rng.uniform(-self.d_limit, self.d_limit)])
 
-        if last_idx is not None:
-            nodes_path = self.generate_final_course(last_idx)
-            path_frenet = np.array([[a.s, a.d] for a in nodes_path])
-            return path_frenet
-        else:
-            return None
+            # nearest
+            i_near = int(np.argmin(np.sum((S[:n] - rnd) ** 2, axis=1)))
+            vec = rnd - S[i_near]
+            dist = math.hypot(vec[0], vec[1])
+            if dist < 1e-6:
+                continue
+
+            # steer (forward only)
+            new = S[i_near] + vec * min(1.0, step / dist)
+            if new[0] <= S[i_near, 0] + 1e-3:
+                continue
+            if not self._segment_free(S[i_near], new, s_clear):
+                continue
+
+            # neighbours
+            r = 1.5 * step * math.sqrt(math.log(n + 1) / (n + 1))
+            d2 = np.sum((S[:n] - new) ** 2, axis=1)
+            within = d2 <= r * r
+            near_parent = np.nonzero(within & (S[:n, 0] < new[0]))[0]
+            near_child = np.nonzero(within & (S[:n, 0] > new[0]))[0]
+
+            # choose parent (cheapest collision-free)
+            best = i_near
+            best_cost = cost[i_near] + math.hypot(*(new - S[i_near]))
+            if len(near_parent):
+                c = cost[near_parent] + np.sqrt(d2[near_parent])
+                for k in np.argsort(c):
+                    if c[k] >= best_cost:
+                        break
+                    if self._segment_free(S[near_parent[k]], new, s_clear):
+                        best, best_cost = int(near_parent[k]), float(c[k])
+                        break
+
+            S[n] = new
+            parent[n] = best
+            cost[n] = best_cost
+            idx = n
+            n += 1
+
+            # rewire
+            for j in near_child:
+                c = best_cost + math.sqrt(d2[j])
+                if c < cost[j] and self._segment_free(new, S[j], s_clear):
+                    parent[j] = idx
+                    cost[j] = c
+
+        # connect every goal
+        paths = []
+        for g in goals:
+            d2 = np.sum((S[:n] - g) ** 2, axis=1)
+            cand = np.nonzero((d2 <= step * step) & (S[:n, 0] < g[0]))[0]
+            best = None
+            if len(cand):
+                c = cost[cand] + np.sqrt(d2[cand])
+                for k in np.argsort(c):
+                    if self._segment_free(S[cand[k]], g, s_clear):
+                        best = int(cand[k])
+                        break
+            if best is None:
+                paths.append(None)
+                continue
+            chain = [g]
+            i = best
+            while i != -1:
+                chain.append(S[i])
+                i = parent[i]
+            paths.append(np.array(chain[::-1]))
+        return paths

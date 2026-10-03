@@ -1,474 +1,317 @@
 #!/usr/bin/env python3
 
 import math
+import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.time import Time
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.qos import QoSProfile, HistoryPolicy, ReliabilityPolicy
 from nav_msgs.msg import Odometry
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
+from scipy.interpolate import make_smoothing_spline
 from racetrack_utilities.racetrack_utilities import RacetrackUtilities
-from scipy.interpolate import BSpline
-from rrt_planner.rrt_planner import RRTStarPlanner, NodeRRT
+from rrt_planner.rrt_planner import RRTStarPlanner
+
 
 class OpponentIntentPredictor(Node):
     def __init__(self):
         super().__init__('opponent_intent_predictor')
-        
-        self.ego_odom_sub = self.create_subscription(Odometry, '/ego_racecar/odom', self.ego_odom_callback, 10)
-        self.starting_points_sub = self.create_subscription(Marker, '/starting_points', self.starting_points_cb, 10)
+
+        # ---- parameters -------------------------------------------------
+        self.path_resolution = 40
+        self.plan_period = 0.1            # timer rate; also the max publish rate
+        self.marker_lifetime = 3.5 * self.plan_period   # expire fast, never linger
+        self.max_start_age = 0.5          # drop starting points older than this [s]
+        self.opponent_velocity = 2.5
+        self.ego_velocity = 2.0
+        self.d_goals = np.linspace(-0.8, 0.8, 5)
+        self.d_clear = 0.5
+        self.ego_d_candidates = np.linspace(-0.9, 0.9, 5)
+        self.d_limit = 0.8
+        self.smoothing_lam = 1      # make_smoothing_spline lam (t normalised to [0, 1])
+        self.n_fit_points = 20       # RRT polyline is resampled to this many points (must be >= 5)
+        self.max_s_clearance = 6.0
+
+        self.rutil = RacetrackUtilities("/sim_ws/src/lidar_processing/scripts/Spielberg_map.csv")
+        self.planner = RRTStarPlanner(max_iter=500, d_limit=self.d_limit, d_clear=self.d_clear, time_budget=0.030)
+
+        self.ego_state = (0.0, 0.0, 0.0)
+        self.ego_data_received = False
+        self.latest_points = None
+        self.latest_stamp = None
+        self.points_seq = 0
+        self.planned_seq = 0
+
+        # depth-1 queue: if we fall behind we skip to the newest message
+        # instead of chewing through a backlog of stale ones.
+        latest_qos = QoSProfile(depth=1,
+                                history=HistoryPolicy.KEEP_LAST,
+                                reliability=ReliabilityPolicy.BEST_EFFORT)
+
+        # Separate callback groups + MultiThreadedExecutor so that
+        # planning never blocks odom / starting-point reception.
+        io_group = MutuallyExclusiveCallbackGroup()
+        plan_group = MutuallyExclusiveCallbackGroup()
+
+        self.create_subscription(Odometry, '/ego_racecar/odom',
+                                 self.ego_odom_callback, latest_qos,
+                                 callback_group=io_group)
+        self.create_subscription(Marker, '/starting_points',
+                                 self.starting_points_cb, latest_qos,
+                                 callback_group=io_group)
+        self.create_timer(self.plan_period, self.plan_timer_cb,
+                          callback_group=plan_group)
 
         self.threat_splines_pubs = [
             self.create_publisher(MarkerArray, '/predicted_opponent_splines_0', 10),
             self.create_publisher(MarkerArray, '/predicted_opponent_splines_1', 10),
-            self.create_publisher(MarkerArray, '/predicted_opponent_splines_2', 10)
+            self.create_publisher(MarkerArray, '/predicted_opponent_splines_2', 10),
         ]
-
         self.ego_lane_possibilities_pub = self.create_publisher(
-            MarkerArray,
-            '/ego_lane_possibilities',
-            10
-        )
-        
-        self.ego_x = self.ego_y = self.ego_yaw = 0.0
-        self.ego_data_received = False
-        
-        self.path_resolution = 40
-        self.last_publish_time = self.get_clock().now()
-        self.publish_interval = 0.0
-        self.marker_lifetime = 1.0
+            MarkerArray, '/ego_lane_possibilities', 10)
 
-        self.opponent_velocity = 2.5
-        self.ego_velocity = 1.5
-
-        self.rutil = RacetrackUtilities("/sim_ws/src/lidar_processing/scripts/Spielberg_map.csv")
-        
-
+    # ------------------------------------------------------------------
+    # Subscribers
+    # ------------------------------------------------------------------
     def ego_odom_callback(self, msg):
-        self.ego_x = msg.pose.pose.position.x
-        self.ego_y = msg.pose.pose.position.y
-        self.ego_yaw = self.quat_to_yaw(msg.pose.pose.orientation)
+        p = msg.pose.pose.position
+        self.ego_state = (p.x, p.y, self.quat_to_yaw(msg.pose.pose.orientation))
         self.ego_data_received = True
 
     def starting_points_cb(self, msg: Marker):
-        current_time = self.get_clock().now()
+        self.latest_points = [(p.x, p.y) for p in msg.points]
+        self.latest_stamp = msg.header.stamp
+        self.points_seq += 1
 
-        if (current_time - self.last_publish_time).nanoseconds < self.publish_interval * 1e9:
+    # ------------------------------------------------------------------
+    # Planning 
+    # ------------------------------------------------------------------
+    
+    def plan_timer_cb(self):
+        if not self.ego_data_received or self.latest_points is None:
             return
+        if self.points_seq == self.planned_seq:
+            return                        
+        self.planned_seq = self.points_seq
 
-        starting_points = msg.points
+        points = self.latest_points
 
-        threat_paths, opponent_time_paths = self.generate_opponent_splines_rrt(starting_points)
-        ego_paths, ego_time_paths = self.generate_ego_lane_possibilities()
+        if len(points) == 0: return
+
+        ex, ey, _ = self.ego_state       
+
+        s_ego, d_ego = self.rutil.convert_to_frenet(ex, ey)
+        starts = []
+        for (x, y) in points[:3]:
+            s_opp, d_opp = self.rutil.convert_to_frenet(x, y)
+            starts.append((s_opp, d_opp))
+
+        starts = np.asarray(starts, dtype=float)
+
+        threat_paths, opponent_time_paths, max_ot_time = self.generate_opponent_splines_rrt(
+            starts, s_ego, d_ego)
+        ego_time_paths = self.generate_ego_lane_possibilities(s_ego, d_ego, max_ot_time)
 
         self.publish_threat_markers(threat_paths)
 
-        # Consider opponent trajectories from ALL 3 starting points.
-        best_ego_idx = self.find_best_defense_trajectory(
-            opponent_time_paths,
-            ego_time_paths
-        )
-
+        best_ego_idx = self.find_best_defense_trajectory(opponent_time_paths, ego_time_paths)
         if best_ego_idx is not None:
-            self.publish_ego_lane_possibilities(
-                [ego_paths[best_ego_idx]]
-            )
-
-        self.last_publish_time = current_time
+            best = ego_time_paths[best_ego_idx]
+            ego_cart = self.rutil.convert_to_cartesian_arr(best[:, 1], best[:, 2])
+            self.publish_ego_lane_possibilities([ego_cart])
 
 
-    def generate_opponent_splines_rrt(self, starting_points: list):
-        d_traj_candidates = np.linspace(-0.7, 0.7, 2)
+    def get_rrt_conditions(self, starts, s_ego, d_ego, goals):
+        ego_pose_frenet = np.array([s_ego, d_ego])
+        distances = ego_pose_frenet[0] - starts[:, 0]
+        opp_ot_times = distances/(self.opponent_velocity - self.ego_velocity)
+        s_clearances = np.minimum((self.ego_velocity) * opp_ot_times, self.max_s_clearance)
+        goal_sets = []
+        for s_clear in s_clearances:
+            goal_sets.append(goals + np.array([s_clear + 1.0, 0.0]))
+        
+        return {
+            "s_clearances": s_clearances,
+            "goals": np.array(goal_sets),
+            "opp_ot_times": opp_ot_times
+        }
+
+                
+    def generate_opponent_splines_rrt(self, starts, s_ego, d_ego):
+        self.planner.set_obstacles([(s_ego, d_ego)])
+        rrt_goals = np.column_stack((np.full(len(self.d_goals), s_ego), self.d_goals))
+
         threat_paths = []
         opponent_time_paths = []
 
-        for point in starting_points:
-            s_opp, d_opp = self.rutil.convert_to_frenet(point.x, point.y)
-            s_ego, d_ego = self.rutil.convert_to_frenet(self.ego_x, self.ego_y) 
-            obstacles = [(s_ego, d_ego)]
-            planner = RRTStarPlanner(obstacles, 200, 0.1, 0.5)
+        rrt_conditions_dict = self.get_rrt_conditions(starts, s_ego, d_ego, rrt_goals)
+        s_clearances = rrt_conditions_dict["s_clearances"]
+        goals = rrt_conditions_dict["goals"]
+        max_ot_time = max(rrt_conditions_dict["opp_ot_times"])
 
-            # paths arrays
+        for i, (s_opp, d_opp) in enumerate(starts):
             point_paths = []
             point_time_paths = []
 
-            for d_traj in d_traj_candidates:
-                course = planner.plan_rrt(NodeRRT(s_opp, d_opp), NodeRRT(s_ego + 2, d_traj), 0.2)
-                if course is not None:
-                    spline_s, spline_d = self.create_bspline(course)
-                    t_values = np.linspace(0.0, 1.0, self.path_resolution)
-                    spline_points_cart = self.rutil.convert_to_cartesian_arr(spline_s(t_values), spline_d(t_values)).tolist()
-                    time_path = self.reparameterize_spline(spline_s, spline_d, self.opponent_velocity)
-
-                    point_paths.append(spline_points_cart)
+            # opponent already ahead of the goal -> nothing meaningful to plan
+            if s_opp < s_ego - 0.5:
+                courses = self.planner.plan((s_opp, d_opp), goals[i], s_clearances[i], step=0.6)
+                for course in courses:
+                    if course is None:
+                        continue
+                    time_path = self.path_to_time_trajectory(course, self.opponent_velocity)
+                    if time_path is None:
+                        continue
+                    cart = self.rutil.convert_to_cartesian_arr(time_path[:, 1], time_path[:, 2])
+                    point_paths.append(cart.tolist())
                     point_time_paths.append(time_path)
 
             threat_paths.append(point_paths)
             opponent_time_paths.append(point_time_paths)
 
-        return threat_paths, opponent_time_paths
+        return threat_paths, opponent_time_paths, max_ot_time
 
-    
-    def generate_opponent_splines(self, starting_points: list):
-        d_traj_candidates = np.linspace(-0.9, 0.9, 5)
-        threat_paths = []
-        opponent_time_paths = []
+    def generate_ego_lane_possibilities(self, s_ego, d_ego, max_ot_time):
+        """Constant-speed ego paths with a smooth lateral shift over the 2nd half."""
+        horizon = min(max_ot_time * self.ego_velocity, self.max_s_clearance)
+        T = horizon / self.ego_velocity
+        t = np.linspace(0.0, T, self.path_resolution)
+        u = np.clip((t / T - 0.5) / 0.5, 0.0, 1.0)
+        blend = u * u * (3.0 - 2.0 * u)          # smoothstep
+        s = s_ego + self.ego_velocity * t
 
-        for point in starting_points:
-            s_opp, d_opp = self.rutil.convert_to_frenet(point.x, point.y)
-            s_ego, d_ego = self.rutil.convert_to_frenet(self.ego_x, self.ego_y)
-
-            point_paths = []
-            point_time_paths = []
-
-            for d_traj in d_traj_candidates:
-                if abs(d_traj - d_ego) < 0.2:
-                    continue 
-                    
-                P = np.array([
-                    [s_opp, d_opp],
-                    [s_opp + (1/3)*(s_ego - s_opp), d_traj],
-                    [s_opp + (2/3)*(s_ego - s_opp), d_traj],
-                    [s_ego, d_traj],
-                    [s_ego + 3, d_traj] 
-                ])
-
-                spline_s, spline_d = self.create_bspline(P)
-
-                t_values = np.linspace(0.0, 1.0, self.path_resolution)
-
-                spline_points_cart = [
-                    self.rutil.convert_to_cartesian(
-                        float(spline_s(t)),
-                        float(spline_d(t))
-                    )
-                    for t in t_values
-                ]
-
-                time_path = self.reparameterize_spline(
-                    spline_s,
-                    spline_d,
-                    self.opponent_velocity
-                )
-
-                point_paths.append(spline_points_cart)
-                point_time_paths.append(time_path)
-
-            threat_paths.append(point_paths)
-            opponent_time_paths.append(point_time_paths)
-
-        return threat_paths, opponent_time_paths
+        return [np.column_stack((t, s, d_ego + (d_traj - d_ego) * blend))
+                for d_traj in self.ego_d_candidates]
 
 
-    def generate_ego_lane_possibilities(self):
-        d_traj_candidates = np.linspace(-0.9, 0.9, 5)
-        ego_paths = []
-        ego_time_paths = []
+    def path_to_time_trajectory(self, P, velocity):
+        """RRT waypoints (N,2) -> (path_resolution, 3) array of [t, s, d] at
+        constant speed, using smoothing splines to smooth the RRT path."""
+        P = np.asarray(P, dtype=float)
+        seg = np.hypot(*np.diff(P, axis=0).T)
+        P = P[np.concatenate(([True], seg > 1e-6))]
+        if len(P) < 2:
+            return None
 
-        s_ego, d_ego = self.rutil.convert_to_frenet(self.ego_x, self.ego_y)
+        u = np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(P, axis=0).T))))
+        u_fit = np.linspace(0.0, u[-1], max(5, self.n_fit_points))
+        s_fit = np.interp(u_fit, u, P[:, 0])
+        d_fit = np.interp(u_fit, u, P[:, 1])
 
-        for d_traj in d_traj_candidates:
-            P = np.array([
-                [s_ego, d_ego],
-                [s_ego + 0.5, d_ego],
-                [s_ego + 1.0, d_ego],
-                [s_ego + 1.5, d_ego + 0.5*(d_traj - d_ego)],
-                [s_ego + 2.0, d_traj]
-            ])
+        t_param = np.linspace(0.0, 1.0, len(u_fit))
+        spline_s = make_smoothing_spline(t_param, s_fit, lam=self.smoothing_lam)
+        spline_d = make_smoothing_spline(t_param, d_fit, lam=self.smoothing_lam)
 
-            spline_s, spline_d = self.create_bspline(P)
+        uu = np.linspace(0.0, 1.0, 100)
+        Q = np.column_stack((spline_s(uu), spline_d(uu)))
+        Q[:, 1] = np.clip(Q[:, 1], -self.d_limit, self.d_limit)
 
-            t_values = np.linspace(0.0, 1.0, self.path_resolution)
+        arc = np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(Q, axis=0).T))))
+        if arc[-1] < 1e-6:
+            return None
+        t = arc / velocity
+        ts = np.linspace(0.0, t[-1], self.path_resolution)
+        return np.column_stack((ts, np.interp(ts, t, Q[:, 0]), np.interp(ts, t, Q[:, 1])))
 
-            spline_points_cart = [
-                self.rutil.convert_to_cartesian(
-                    float(spline_s(t)),
-                    float(spline_d(t))
-                )
-                for t in t_values
-            ]
-
-            time_path = self.reparameterize_spline(
-                spline_s,
-                spline_d,
-                self.ego_velocity
-            )
-
-            ego_paths.append(spline_points_cart)
-            ego_time_paths.append(time_path)
-
-        return ego_paths, ego_time_paths
-
-
-    def create_bspline(self, P):
-        degree = 3
-        n = len(P)
-
-        knots = np.concatenate([
-            np.zeros(degree),
-            np.linspace(0.0, 1.0, n - degree + 1),
-            np.ones(degree)
-        ])
-
-        spline_s = BSpline(knots, P[:, 0], degree)
-        spline_d = BSpline(knots, P[:, 1], degree)
-
-        return spline_s, spline_d
-
-
-    def reparameterize_spline(self, spline_s, spline_d, velocity):
-        u_values = np.linspace(0.0, 1.0, 1000)
-
-        ds_du = spline_s.derivative()(u_values)
-        dd_du = spline_d.derivative()(u_values)
-
-        speed_u = np.sqrt(ds_du**2 + dd_du**2)
-
-        du = np.diff(u_values)
-
-        arc_length = np.concatenate([
-            [0.0],
-            np.cumsum(
-                0.5 * (speed_u[:-1] + speed_u[1:]) * du
-            )
-        ])
-
-        time_values = arc_length / velocity
-
-        s_values = spline_s(u_values)
-        d_values = spline_d(u_values)
-
-        sample_times = np.linspace(
-            0.0,
-            time_values[-1],
-            self.path_resolution
-        )
-
-        sample_s = np.interp(
-            sample_times,
-            time_values,
-            s_values
-        )
-
-        sample_d = np.interp(
-            sample_times,
-            time_values,
-            d_values
-        )
-
-        return np.column_stack((
-            sample_times,
-            sample_s,
-            sample_d
-        ))
-
-
+    # ------------------------------------------------------------------
+    # Collision / selection
+    # ------------------------------------------------------------------
     def find_best_defense_trajectory(self, opponent_paths, ego_paths):
-        """
-        Evaluate every ego trajectory against every opponent trajectory
-        from all starting points.
-
-        If an ego/opponent trajectory pair does not collide, that pair
-        is ignored when calculating the average TTC.
-
-        The ego trajectory with the smallest average TTC is selected.
-        """
-
+        """Ego trajectory with the smallest average TTC over all colliding
+        (ego, opponent) pairs across all starting points."""
         if len(opponent_paths) == 0 or len(ego_paths) == 0:
             return None
 
         average_ttc = []
-
         for ego_path in ego_paths:
             collision_times = []
-
-            # opponent_paths contains one list of trajectories for
-            # each starting point.
             for starting_point_paths in opponent_paths:
-
-                # Check every candidate trajectory for this starting point.
                 for opponent_path in starting_point_paths:
-                    ttc = self.find_time_to_collision(
-                        opponent_path,
-                        ego_path
-                    )
-
-                    # Ignore trajectory pairs with no collision.
+                    ttc = self.find_time_to_collision(opponent_path, ego_path)
                     if ttc is not None:
                         collision_times.append(ttc)
+            average_ttc.append(np.mean(collision_times) if collision_times else np.inf)
 
-            # Only average over trajectory pairs that actually collide.
-            if len(collision_times) > 0:
-                average_ttc.append(np.mean(collision_times))
-            else:
-                average_ttc.append(np.inf)
-
-        # If none of the ego trajectories collide with any opponent
-        # trajectory, there is no defensive trajectory to select.
-        if all(np.isinf(value) for value in average_ttc):
+        if all(np.isinf(v) for v in average_ttc):
             return None
-
-        # Select the ego trajectory with the smallest average TTC.
         return int(np.argmin(average_ttc))
 
-
-    def find_time_to_collision(self, opponent_path, ego_path):
+    def find_time_to_collision(self, opponent_path, ego_path, n_samples=150):
         if len(opponent_path) == 0 or len(ego_path) == 0:
             return None
 
-        opponent_times = opponent_path[:, 0]
-        ego_times = ego_path[:, 0]
-
-        start_time = max(
-            opponent_times[0],
-            ego_times[0]
-        )
-
-        end_time = min(
-            opponent_times[-1],
-            ego_times[-1]
-        )
-
+        ot, et = opponent_path[:, 0], ego_path[:, 0]
+        start_time = max(ot[0], et[0])
+        end_time = min(ot[-1], et[-1])
         if start_time > end_time:
             return None
 
-        collision_check_resolution = 1000
+        times = np.linspace(start_time, end_time, n_samples)
+        ds = np.interp(times, ot, opponent_path[:, 1]) - np.interp(times, et, ego_path[:, 1])
+        dd = np.interp(times, ot, opponent_path[:, 2]) - np.interp(times, et, ego_path[:, 2])
 
-        times = np.linspace(
-            start_time,
-            end_time,
-            collision_check_resolution
-        )
-
-        opponent_s = np.interp(
-            times,
-            opponent_times,
-            opponent_path[:, 1]
-        )
-
-        opponent_d = np.interp(
-            times,
-            opponent_times,
-            opponent_path[:, 2]
-        )
-
-        ego_s = np.interp(
-            times,
-            ego_times,
-            ego_path[:, 1]
-        )
-
-        ego_d = np.interp(
-            times,
-            ego_times,
-            ego_path[:, 2]
-        )
-
-        collision_mask = (
-            (np.abs(opponent_s - ego_s) < 0.3) &
-            (np.abs(opponent_d - ego_d) < 0.2)
-        )
-
-        collision_indices = np.where(collision_mask)[0]
-
-        if len(collision_indices) == 0:
+        hits = np.nonzero((np.abs(ds) < 0.3) & (np.abs(dd) < 0.25))[0]
+        if len(hits) == 0:
             return None
+        return float(times[hits[0]])
 
-        return float(times[collision_indices[0]])
-
+    # ------------------------------------------------------------------
+    # Publishing
+    # ------------------------------------------------------------------
+    def _line_marker(self, ns, idx, rgb, path, stamp):
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = stamp
+        marker.ns = ns
+        marker.id = idx
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.05
+        marker.color.r, marker.color.g, marker.color.b = rgb
+        marker.color.a = 0.8
+        marker.lifetime.sec = int(self.marker_lifetime)
+        marker.lifetime.nanosec = int((self.marker_lifetime - int(self.marker_lifetime)) * 1e9)
+        for pt in path:
+            p = Point()
+            p.x, p.y, p.z = float(pt[0]), float(pt[1]), 0.0
+            marker.points.append(p)
+        return marker
 
     def publish_threat_markers(self, threat_paths):
-        colors = [
-            (1.0, 0.0, 0.0),
-            (0.0, 1.0, 0.0),
-            (0.0, 0.0, 1.0)
-        ]
-
-        for point_idx, point_paths in enumerate(threat_paths):
-            marker_array = MarkerArray()
-
-            r, g, b = colors[point_idx]
-
+        colors = [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)]
+        stamp = self.get_clock().now().to_msg()
+        for point_idx, point_paths in enumerate(threat_paths[:3]):
+            arr = MarkerArray()
             for idx, path in enumerate(point_paths):
-                marker = Marker()
-                marker.header.frame_id = "map"
-                marker.header.stamp = self.get_clock().now().to_msg()
-                marker.ns = f"opponent_threats_{point_idx}"
-                marker.id = idx
-                marker.type = Marker.LINE_STRIP
-                marker.action = Marker.ADD
-                marker.scale.x = 0.05
-                
-                marker.color.r = r
-                marker.color.g = g
-                marker.color.b = b
-                marker.color.a = 0.8
-
-                marker.lifetime.sec = int(self.marker_lifetime)
-                marker.lifetime.nanosec = int(
-                    (self.marker_lifetime - int(self.marker_lifetime)) * 1e9
-                )
-                
-                for pt in path:
-                    p = Point()
-                    p.x = float(pt[0])
-                    p.y = float(pt[1])
-                    p.z = 0.0
-                    marker.points.append(p)
-                
-                marker_array.markers.append(marker)
-            
-            self.threat_splines_pubs[point_idx].publish(marker_array)
-
+                arr.markers.append(self._line_marker(
+                    f"opponent_threats_{point_idx}", idx, colors[point_idx], path, stamp))
+            self.threat_splines_pubs[point_idx].publish(arr)
 
     def publish_ego_lane_possibilities(self, ego_paths):
-        marker_array = MarkerArray()
-
+        stamp = self.get_clock().now().to_msg()
+        arr = MarkerArray()
         for idx, path in enumerate(ego_paths):
-            marker = Marker()
-            marker.header.frame_id = "map"
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.ns = "ego_lane_possibilities"
-            marker.id = idx
-            marker.type = Marker.LINE_STRIP
-            marker.action = Marker.ADD
-            marker.scale.x = 0.05
-
-            marker.color.r = 1.0
-            marker.color.g = 1.0
-            marker.color.b = 0.0
-            marker.color.a = 0.8
-
-            marker.lifetime.sec = int(self.marker_lifetime)
-            marker.lifetime.nanosec = int(
-                (self.marker_lifetime - int(self.marker_lifetime)) * 1e9
-            )
-
-            for pt in path:
-                p = Point()
-                p.x = float(pt[0])
-                p.y = float(pt[1])
-                p.z = 0.0
-                marker.points.append(p)
-
-            marker_array.markers.append(marker)
-
-        self.ego_lane_possibilities_pub.publish(marker_array)
-
+            arr.markers.append(self._line_marker(
+                "ego_lane_possibilities", idx, (1.0, 1.0, 0.0), path, stamp))
+        self.ego_lane_possibilities_pub.publish(arr)
 
     @staticmethod
     def quat_to_yaw(q):
-        return math.atan2(
-            2.0 * (q.w * q.z + q.x * q.y),
-            1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-        )
+        return math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                          1.0 - 2.0 * (q.y * q.y + q.z * q.z))
 
 
 def main(args=None):
     rclpy.init(args=args)
     node = OpponentIntentPredictor()
+    executor = MultiThreadedExecutor(num_threads=3)
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
