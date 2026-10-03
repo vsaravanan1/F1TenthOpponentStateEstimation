@@ -67,7 +67,7 @@ Expect: `dynamic_mppi node initialized (state=RACELINE)`, car starts lapping.
 ### Pane 3 — divert injector (test tool)
 ```bash
 ros2 run lidar_processing divert_injector_node.py --ros-args \
-  -p csv_path:=/sim_ws/src/lidar_processing/config/diverts/divert_left.csv
+  -p csv_path:=/sim_ws/src/lidar_processing/config/diverts/divert_mid2.csv
 ```
 Auto-fires ~5 s after launch.
 

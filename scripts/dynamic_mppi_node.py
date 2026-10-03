@@ -277,17 +277,19 @@ class DynamicMPPI(Node):
     # Cost (unchanged) -- only get_nearest_waypoint reads active_waypoints
     # ------------------------------------------------------------------ #
     def compute_cost(self, x_t, v_t, pose_msg):
-        weights = [13.5, 13.5, 5.5, 5.0]
+        weights = [13.5, 13.5, 12.0, 5.0]   # yaw weight raised now that it's correct
         xx, yy, ya = np.hsplit(x_t, 3)
         vv = np.expand_dims(v_t, 1)
-        ya[ya < 0] = ya[ya < 0] + 2 * np.pi
         _, rx, ry, ryaw, rv = self.get_nearest_waypoint(xx, yy)
-        ryaw = ryaw + np.pi / 2
-        ryaw[ryaw < 0] = ryaw[ryaw < 0] + 2 * np.pi
-        ryaw[ryaw - ya > 4.5] = np.abs(ryaw[ryaw - ya > 4.5] - (2 * np.pi))
-        ryaw[ryaw - ya < -4.5] = np.abs(ryaw[ryaw - ya < -4.5] + (2 * np.pi))
+
+        # stored psi -> true heading is (pi/2 - psi)
+        ryaw = np.pi / 2.0 - ryaw
+
+        # properly wrapped heading error in (-pi, pi]; handles all wrap cases
+        yaw_err = np.arctan2(np.sin(ya - ryaw), np.cos(ya - ryaw))
+
         cost = (weights[0] * (xx - rx) ** 2 + weights[1] * (yy - ry) ** 2 +
-                weights[2] * (ya - ryaw) ** 2 + weights[3] * (vv - rv) ** 2)
+                weights[2] * yaw_err ** 2 + weights[3] * (vv - rv) ** 2)
         cost += np.expand_dims(self.is_collided(x_t, pose_msg), 1) * 1.0e10
         return cost
 
@@ -366,9 +368,22 @@ class DynamicMPPI(Node):
         self.marker_pub.publish(ma)
 
     def _publish_opt(self, traj):
+        stamp = self.get_clock().now().to_msg()
         ma = MarkerArray()
+        # always show the full centerline
+        ma.markers.append(line_marker(self.raceline[:, :2], "centerline", 0,
+                                      (0.5, 0.5, 0.5), stamp=stamp, width=0.03))
+        # if diverting, show divert + return from the active array
+        if self.maneuver is not None:
+            info = self.maneuver
+            nb, nd, nr = info["n_before"], info["n_divert"], info["n_return"]
+            ma.markers.append(line_marker(self.active_waypoints[nb:nb+nd, :2],
+                              "divert", 1, (1.0, 0.5, 0.0), stamp=stamp, width=0.06))
+            ma.markers.append(line_marker(self.active_waypoints[nb+nd:nb+nd+nr, :2],
+                              "return", 2, (0.0, 1.0, 0.0), stamp=stamp, width=0.06))
+        # the optimal rollout
         ma.markers.append(line_marker(traj[:, :2], "opt", 10, (1.0, 0.0, 0.0),
-                                      stamp=self.get_clock().now().to_msg(), width=0.04))
+                                      stamp=stamp, width=0.04))
         self.marker_pub.publish(ma)
 
 

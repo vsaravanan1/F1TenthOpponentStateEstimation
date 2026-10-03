@@ -174,64 +174,47 @@ class ReferencePlanner:
 
     # MPPI-side: return spline
     def build_return(self, start_xy, start_heading,
-                     return_len=4.0, spacing=None, start_v=None, v_scale=1.0,
+                     return_len=5.0, spacing=None, start_v=None, v_scale=1.0,
                      max_return_len=None):
         """
-        Smooth, curvature-continuous rejoin from the off-line pose to the line.
-        If the rejoin folds (offset inside the local radius of curvature on a tight
-        corner), it is lengthened and retried; if no length works the maneuver is
-        geometrically infeasible and this returns (None, info) so the caller can
-        safely ignore the divert and stay on the centerline.
+        Simple return: straight line from the car's current position to a point
+        ~return_len metres ahead ON the centerline, then it's back on the line.
+        Not curvature-continuous, but robust and never swings the wrong way.
         """
         if spacing is None:
             spacing = float(np.median(self.seg))
-        if max_return_len is None:
-            max_return_len = max(return_len * 3.0, 12.0)
 
         start_xy = np.asarray(start_xy, float).reshape(1, 2)
         s0, d0, _ = self.project(start_xy)
-        s0 = float(s0[0]); d0 = float(d0[0])
-        base0 = float(self.heading_at(s0)[0])
-        ang = np.clip(_wrap_pi(start_heading - base0), -1.3, 1.3)
-        dd0 = float(np.tan(ang))
+        s0 = float(s0[0])
 
-        L = return_len
-        while True:
-            s_end = s0 + L
-            sg = np.linspace(s0, s_end, max(int(np.ceil(L / spacing)) + 1, 8))
-            if _HAVE_SCIPY:
-                bc = ([(1, dd0), (2, 0.0)], [(1, 0.0), (2, 0.0)])
-                dg = make_interp_spline([s0, s_end], [d0, 0.0], k=5, bc_type=bc)(sg)
-            else:
-                dg = np.interp(sg, [s0, s_end], [d0, 0.0])
-            dg[-1] = 0.0
-            ret_xy = self.frenet_to_xy(sg, dg)
-            ret_xy, _ = _resample_polyline(ret_xy, spacing)
-            if self._is_forward(ret_xy) or L >= max_return_len:
-                break
-            L = min(L * 1.5, max_return_len)
+        # target: a point return_len ahead along the centerline, offset 0 (on the line)
+        s_target = s0 + return_len
+        target_xy = self.frenet_to_xy(np.array([s_target]), np.array([0.0]))[0]
 
-        if not self._is_forward(ret_xy):
-            return None, {"reason": "infeasible rejoin (offset inside corner radius)",
-                          "s0": s0, "d0": d0}
+        # straight line from start to target, resampled at `spacing`
+        p0 = start_xy[0]
+        dist = float(np.hypot(*(target_xy - p0)))
+        n = max(int(np.ceil(dist / spacing)) + 1, 2)
+        t = np.linspace(0.0, 1.0, n)
+        ret_xy = p0[None, :] * (1 - t)[:, None] + target_xy[None, :] * t[:, None]
 
-        dret = np.gradient(ret_xy, axis=0)
-        ret_psi = self._heading_to_psi(np.arctan2(dret[:, 1], dret[:, 0]))
+        # heading from the straight line, stored in CSV psi convention
+        d = np.gradient(ret_xy, axis=0)
+        ret_psi = self._heading_to_psi(np.arctan2(d[:, 1], d[:, 0]))
 
+        # speed: blend start_v up to the raceline throttle at the target
         v_axis = np.append(self.raceline[:, 3], self.raceline[0, 3])
         s_axis = np.append(self.s, self.total_s)
-        n = len(ret_xy)
-        s_lin = np.linspace(s0, s_end, n)
-        rl_v = np.interp(s_lin % self.total_s, s_axis, v_axis) * v_scale
         if start_v is None:
             start_v = float(np.interp(s0 % self.total_s, s_axis, v_axis))
-        w = _smootherstep(s0, s_end, s_lin)
-        ret_v = np.clip((1 - w) * start_v + w * rl_v,
+        v_target = float(np.interp(s_target % self.total_s, s_axis, v_axis))
+        w = np.linspace(0.0, 1.0, n)
+        ret_v = np.clip((1 - w) * start_v + w * v_target,
                         self.raceline[:, 3].min(), self.raceline[:, 3].max())
 
         wps = np.stack([ret_xy[:, 0], ret_xy[:, 1], ret_psi, ret_v], axis=1)
-        return wps, {"s0": s0, "s_end": s_end % self.total_s, "end_xy": ret_xy[-1].copy(),
-                     "return_len": L}
+        return wps, {"s0": s0, "s_end": s_target % self.total_s, "end_xy": ret_xy[-1].copy()}
 
     # splice
     def splice(self, divert_wps, return_wps):
