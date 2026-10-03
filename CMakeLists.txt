@@ -54,6 +54,7 @@ ament_python_install_package(${PROJECT_NAME})
 ament_python_install_package(racetrack_utilities)
 ament_python_install_package(rrt_planner)
 ament_python_install_package(f1tenth_mppi)
+ament_python_install_package(f1tenth_mppi_dynamic)
 
 # =====================
 # Includes
@@ -132,6 +133,13 @@ install(PROGRAMS
   scripts/Overtake.py
   # scripts/lstm.py
   scripts/generate_candidate_trajectories.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  scripts/dynamic_mppi_node.py
+  scripts/divert_injector_node.py
+  scripts/path_converter_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
