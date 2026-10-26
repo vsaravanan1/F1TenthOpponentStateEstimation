@@ -317,7 +317,7 @@ class OpponentIntentPredictor(Node):
         if len(hits) == 0:
             return None
         return float(times[hits[0]])
-
+        
     # ------------------------------------------------------------------
     # Publishing
     # ------------------------------------------------------------------

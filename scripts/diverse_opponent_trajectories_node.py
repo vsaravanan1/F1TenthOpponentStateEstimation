@@ -332,7 +332,7 @@ class DiverseOpponentTrajectories(Node):
         self.stale_timeout = 0.5      # s, ignore a topic whose last msg is older
         self.plan_period = 0.1        # s, rebuild/search rate
         self.marker_lifetime = 0.3    # s
-        self.smooth_points = 60       # resampled points per smoothed trajectory
+        self.smooth_points = 40       # resampled points per smoothed trajectory
         self.smooth_s = 0.3           # B-spline smoothing factor (splprep s; 0 = interpolate)
 
         # latest splines per input topic + receipt time (ns)
