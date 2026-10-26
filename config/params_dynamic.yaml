@@ -4,7 +4,7 @@
 dynamic_mppi:
   ros__parameters:
     visualize: True
-    waypoint_path: "Spielberg_mppi_waypoints_sparse.csv"   # same centerline as the original
+    waypoint_path: "/sim_ws/src/lidar_processing/config/Spielberg_mppi_waypoints_sparse.csv"   # same centerline as the original
     vehicle_frame: "ego_racecar/base_link"
 
     # Publishers
@@ -20,13 +20,13 @@ dynamic_mppi:
     # Model (identical to the working MPPI)
     wheelbase: 0.33
     min_throttle: 0.75
-    max_throttle: 1.0
+    max_throttle: 2.0
     max_steer: 0.3
     dt: 0.1
 
     # MPPI
-    num_trajectories: 100
-    steps_trajectories: 25
+    num_trajectories: 50
+    steps_trajectories: 15
     v_sigma: 0.05
     omega_sigma: 0.2
     lambda: 10
@@ -47,9 +47,9 @@ dynamic_mppi:
 
 divert_path_converter:
   ros__parameters:
-    in_topic: "/ego_lane_possibilities"  # selected defensive spline (MarkerArray)
+    in_topic: "/ego_best_defensive_spline"  # selected defensive spline (MarkerArray)
     out_topic: "/divert_waypoints"
-    divert_speed: 0.85
+    divert_speed: 1.5
     spacing: 0.1
     min_points: 3
 

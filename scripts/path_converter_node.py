@@ -27,14 +27,14 @@ class PathConverter(Node):
     def __init__(self):
         super().__init__("divert_path_converter")
         self.declare_parameters("", [
-            ("in_topic", "/ego_lane_possibilities"),
+            ("in_topic", "/ego_best_defensive_spline"),
             ("out_topic", "/divert_waypoints"),
-            ("divert_speed", 0.85),     # normalised throttle for the divert
+            ("divert_speed", 2.5),     # normalised throttle for the divert
             ("spacing", 0.1),           # resample spacing (m)
             ("min_points", 3),
         ])
         self.sub = self.create_subscription(
-            MarkerArray, self.get_parameter("in_topic").value, self.cb, 10)
+            MarkerArray, self.get_parameter("in_topic").value, self.cb, 1)
         self.pub = self.create_publisher(
             Float64MultiArray, self.get_parameter("out_topic").value, 10)
         self.get_logger().info(

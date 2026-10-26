@@ -12,8 +12,9 @@ Reference handling:
   * On a message on `divert_topic` (Float64MultiArray, "csv-like" [x,y] or [x,y,psi,v]
     in the map frame), the node:
        1) uses the points VERBATIM as the divert (no heavy geometry here),
-       2) generates ONE return spline from the divert end back to the centerline
-          (the only geometry MPPI runs itself),
+       2) generates ONE return spline from the divert end back to the centerline,
+          built in FRENET (s, d) coordinates so it follows the track and merges
+          smoothly (the only geometry MPPI runs itself),
        3) splices centerline -> divert -> return -> centerline into active_waypoints.
   * A tiny state machine (RACELINE -> DIVERT -> RETURN -> RACELINE) reverts to the
     centerline once the car passes the end of the return. The game-theory layer can
@@ -26,6 +27,8 @@ active_waypoints instead of a fixed array.
 import math
 import numpy as np
 from scipy.ndimage import binary_dilation
+from scipy.spatial import cKDTree
+from scipy.interpolate import splev
 from typing import Tuple
 
 import rclpy
@@ -46,6 +49,8 @@ from geometry_msgs.msg import Point
 from f1tenth_mppi.dynamics_models import KBM
 from f1tenth_mppi_dynamic.reference_manager import ReferencePlanner
 from f1tenth_mppi_dynamic.io_utils import (load_waypoints, unpack_waypoints, line_marker)
+# Frenet (s, d) <-> Cartesian for the track, used to build a smooth return.
+from racetrack_utilities.racetrack_utilities import RacetrackUtilities
 
 RACELINE, DIVERT, RETURN = "RACELINE", "DIVERT", "RETURN"
 
@@ -83,6 +88,9 @@ class DynamicMPPI(Node):
         self.raceline = wp
         self.active_waypoints = self.raceline          # what MPPI tracks
         self.planner = ReferencePlanner(self.raceline, closed=True)
+
+        # Frenet helper for building the return in (s, d) coordinates.
+        self.rutil = RacetrackUtilities(P("racetrack_csv"))
 
         # state machine
         self.state = RACELINE
@@ -129,6 +137,8 @@ class DynamicMPPI(Node):
             ("return_spacing", 0.1),      # resample spacing for divert/return (m)
             ("allow_interrupt", False),   # accept a new divert mid-maneuver?
             ("revert_margin_pts", 2),     # revert this many pts before the return end
+            # map CSV (x_m, y_m, w_tr_left_m, w_tr_right_m) for the Frenet return
+            ("racetrack_csv", "/sim_ws/src/lidar_processing/scripts/Spielberg_map.csv"),
         ])
 
     # ------------------------------------------------------------------ #
@@ -154,12 +164,13 @@ class DynamicMPPI(Node):
             divert = ReferencePlanner.path_to_waypoints(
                 arr[:, :2], self.get_parameter("divert_speed").value, spacing)
 
-        # heading at the divert end, then generate the return (MPPI's own geometry)
+        # heading at the divert end, then generate the return (MPPI's own geometry,
+        # now built in Frenet (s, d) coordinates so it merges smoothly)
         end_xy = divert[-1, :2]
         d_end = divert[-1, :2] - divert[-3, :2] if len(divert) >= 3 else divert[-1, :2] - divert[-2, :2]
         end_heading = math.atan2(d_end[1], d_end[0])
         start_v = float(divert[-1, 3])
-        ret, rinfo = self.planner.build_return(
+        ret, rinfo = self._build_return_frenet(
             end_xy, end_heading,
             return_len=self.get_parameter("return_len").value,
             spacing=spacing, start_v=start_v)
@@ -182,6 +193,71 @@ class DynamicMPPI(Node):
                        f"return pts; rejoin at idx {info['return_end_idx']}")
         if self.get_parameter("visualize").value:
             self._publish_reference_markers(info)
+
+    # ------------------------------------------------------------------ #
+    # Return generation  (FRENET: blend d -> 0 along the track arc length)
+    # ------------------------------------------------------------------ #
+    def _build_return_frenet(self, end_xy, end_heading, return_len, spacing, start_v):
+        """Build the rejoin path in Frenet (s, d) coordinates so it follows the
+        track and merges onto the centerline smoothly.
+
+        The divert end is converted to (s_end, d_end). A cubic Hermite then
+        blends the lateral offset from (d_end, incoming slope) to (0, 0) along
+        the track arc length, so the path is C1 at the junction (no kink with the
+        divert) and tangent to the centerline where it merges. The (s, d) samples
+        are mapped back to Cartesian with RacetrackUtilities.
+
+        Returns (ret, info) where ret is an (N, 4) [x, y, psi, v] array (psi in
+        the same stored convention as the divert/centerline, i.e.
+        true_heading = pi/2 - psi), or (None, {'reason': ...}) if infeasible.
+        """
+        if return_len <= 1e-3:
+            return None, {"reason": "return_len<=0"}
+
+        L = self.rutil.arclength
+
+        # Divert end in Frenet.
+        s_end, d_end = self.rutil.convert_to_frenet(float(end_xy[0]), float(end_xy[1]))
+        s_end = float(s_end)
+        d_end = float(d_end)
+
+        # Centerline heading at the divert end -> incoming lateral slope dd/ds, so
+        # the return continues the divert's heading rather than kinking.
+        s_norm_end = (s_end / L) % 1.0
+        cdx, cdy = splev(s_norm_end, self.rutil.centerline_spline, der=1)
+        theta_c = math.atan2(float(cdy), float(cdx))
+        dtheta = math.atan2(math.sin(end_heading - theta_c),
+                            math.cos(end_heading - theta_c))
+        dtheta = max(min(dtheta, 1.2), -1.2)          # clamp (~69 deg) so tan stays finite
+        m0 = math.tan(dtheta)                          # dd/ds at the start of the return
+
+        # Samples along s; cubic Hermite from (d_end, slope m0) to (0, slope 0).
+        n = max(2, int(round(return_len / max(spacing, 1e-3))) + 1)
+        tau = np.linspace(0.0, 1.0, n)
+        h00 = 2.0 * tau**3 - 3.0 * tau**2 + 1.0        # -> d_end at tau=0
+        h10 = tau**3 - 2.0 * tau**2 + tau              # -> slope term
+        d_vals = h00 * d_end + h10 * (return_len * m0)  # ends at 0 with zero slope
+
+        s_vals = s_end + tau * return_len
+        s_wrapped = np.mod(s_vals, L)                  # closed track: wrap s
+
+        # Keep the rejoin inside the track (a steep incoming heading can make the
+        # Hermite overshoot d_end). Clip to scaled half-widths.
+        left_w, right_w = splev(s_wrapped / L, self.rutil.racetrack_widths_spline, der=0)
+        margin = 0.9
+        d_vals = np.clip(d_vals, -margin * np.asarray(right_w), margin * np.asarray(left_w))
+
+        xy = self.rutil.convert_to_cartesian_arr(s_wrapped, d_vals)   # (N, 2)
+        xy[0] = np.asarray(end_xy, dtype=float)        # exact junction, no gap
+
+        # Stored psi from path tangents: true_heading = atan2(dy, dx); psi = pi/2 - heading.
+        dxy = np.gradient(xy, axis=0)
+        heading = np.arctan2(dxy[:, 1], dxy[:, 0])
+        psi = np.pi / 2.0 - heading
+
+        v = np.full(n, float(start_v))
+        ret = np.column_stack([xy[:, 0], xy[:, 1], psi, v])
+        return ret, {"reason": None}
 
     def _update_state(self, car_xy):
         """Advance the state machine from the car's progress along active_waypoints."""
@@ -218,11 +294,13 @@ class DynamicMPPI(Node):
 
         # state machine update (follow -> return -> raceline)
         self._update_state(x0[:2])
+        self._wp_tree = cKDTree(self.active_waypoints[:, :2])
         sm = String(); sm.data = self.state; self.state_pub.publish(sm)
 
         NT = self.get_parameter("num_trajectories").value
         ST = self.get_parameter("steps_trajectories").value
-        u = self.u_prev
+        u = self.u_prev.copy()
+        u[:,1] *= 0.9
 
         mu = np.zeros(2)
         sigma = np.array([[self.get_parameter("v_sigma").value, 0.0],
@@ -250,7 +328,7 @@ class DynamicMPPI(Node):
         S += self.compute_cost(x[:, j], v[:, j - 1, 0], pose_msg).squeeze() * 10
         w = self.compute_weights(S)
         w_epsilon = np.sum(np.multiply(w[:, np.newaxis, np.newaxis], epsilon), axis=0)
-        w_epsilon = self.moving_average(w_epsilon, 4)
+        w_epsilon = self.moving_average(w_epsilon, 10)
         u += w_epsilon
         u[:, 0] = np.clip(u[:, 0], self.get_parameter("min_throttle").value,
                           self.get_parameter("max_throttle").value)
@@ -277,7 +355,7 @@ class DynamicMPPI(Node):
     # Cost (unchanged) -- only get_nearest_waypoint reads active_waypoints
     # ------------------------------------------------------------------ #
     def compute_cost(self, x_t, v_t, pose_msg):
-        weights = [13.5, 13.5, 12.0, 5.0]   # yaw weight raised now that it's correct
+        weights = [13.5, 13.5, 1.0, 5.0]   # yaw weight raised now that it's correct
         xx, yy, ya = np.hsplit(x_t, 3)
         vv = np.expand_dims(v_t, 1)
         _, rx, ry, ryaw, rv = self.get_nearest_waypoint(xx, yy)
@@ -294,14 +372,13 @@ class DynamicMPPI(Node):
         return cost
 
     def get_nearest_waypoint(self, x, y):
-        cur = np.hstack((x, y))
-        NT = self.get_parameter("num_trajectories").value
-        wp = self.active_waypoints                              # <-- active reference
-        cur_r = np.repeat(np.expand_dims(cur, 1), len(wp), axis=1)
-        wp_r = np.repeat(np.expand_dims(wp[:, :2], 0), NT, axis=0)
-        dist = np.linalg.norm(cur_r - wp_r, axis=2)
-        idx = np.argmin(dist, axis=1)
-        wx, wy, wyaw, wv = np.hsplit(wp[idx], 4)
+        # x, y are (NT, 1). Query all rollout states against a KD-tree built on the
+        # active waypoints -- O(NT log N) instead of the O(NT*N) distance matrix.
+        pts = np.hstack((x, y))                      # (NT, 2)
+        _, idx = self._wp_tree.query(pts)            # (NT,) nearest indices
+        wp = self.active_waypoints[idx]              # (NT, 4)
+        wx = wp[:, 0:1]; wy = wp[:, 1:2]
+        wyaw = wp[:, 2:3]; wv = wp[:, 3:4]
         return idx, wx, wy, wyaw, wv
 
     def is_collided(self, x_t, pose_msg):

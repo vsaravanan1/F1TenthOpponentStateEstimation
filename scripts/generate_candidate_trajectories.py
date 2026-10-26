@@ -12,9 +12,13 @@ from rclpy.qos import QoSProfile, HistoryPolicy, ReliabilityPolicy
 from nav_msgs.msg import Odometry
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
+from std_msgs.msg import Int32
 from scipy.interpolate import make_smoothing_spline
 from racetrack_utilities.racetrack_utilities import RacetrackUtilities
 from rrt_planner.rrt_planner import RRTStarPlanner
+
+# Number of sampled opponent starting points we accept per planning cycle.
+NUM_START_POINTS = 5
 
 
 class OpponentIntentPredictor(Node):
@@ -23,21 +27,27 @@ class OpponentIntentPredictor(Node):
 
         # ---- parameters -------------------------------------------------
         self.path_resolution = 40
-        self.plan_period = 0.1            # timer rate; also the max publish rate
+        self.plan_period = 0.1            # RRT* planning rate (gated on new starting points)
         self.marker_lifetime = 3.5 * self.plan_period   # expire fast, never linger
         self.max_start_age = 0.5          # drop starting points older than this [s]
         self.opponent_velocity = 2.5
-        self.ego_velocity = 2.0
+        self.ego_velocity = 1.5
         self.d_goals = np.linspace(-0.8, 0.8, 5)
         self.d_clear = 0.5
         self.ego_d_candidates = np.linspace(-0.9, 0.9, 5)
         self.d_limit = 0.8
-        self.smoothing_lam = 1      # make_smoothing_spline lam (t normalised to [0, 1])
-        self.n_fit_points = 20       # RRT polyline is resampled to this many points (must be >= 5)
-        self.max_s_clearance = 6.0
+        self.smoothing_lam = 0.5      # make_smoothing_spline lam (t normalised to [0, 1])
+        self.n_fit_points = 40       # RRT polyline is resampled to this many points (must be >= 5)
+        self.max_s_clearance = 5.0
 
         self.rutil = RacetrackUtilities("/sim_ws/src/lidar_processing/scripts/Spielberg_map.csv")
-        self.planner = RRTStarPlanner(max_iter=500, d_limit=self.d_limit, d_clear=self.d_clear, time_budget=0.030)
+        self.planner = RRTStarPlanner(max_iter=500, d_limit=self.d_limit, d_clear=self.d_clear,
+                                      time_budget=0.2, step_target_hops=12, step_min=0.5, step_max=3.0)
+
+        # EMA of measured planning wall-time [s]. Used to project the ego pose
+        # forward (constant velocity) so goals land where the ego will be once
+        # this planning cycle finishes, not where it is at cycle start.
+        self.plan_duration_est = self.planner.time_budget
 
         self.ego_state = (0.0, 0.0, 0.0)
         self.ego_data_received = False
@@ -52,8 +62,10 @@ class OpponentIntentPredictor(Node):
                                 history=HistoryPolicy.KEEP_LAST,
                                 reliability=ReliabilityPolicy.BEST_EFFORT)
 
-        # Separate callback groups + MultiThreadedExecutor so that
-        # planning never blocks odom / starting-point reception.
+        # Two independent callback groups under a MultiThreadedExecutor so the
+        # slow RRT* planning cycle never blocks odom / starting-point reception:
+        #   io_group   -- odom + starting points (must stay fresh)
+        #   plan_group -- the slow RRT* planning cycle (does all publishing)
         io_group = MutuallyExclusiveCallbackGroup()
         plan_group = MutuallyExclusiveCallbackGroup()
 
@@ -66,13 +78,20 @@ class OpponentIntentPredictor(Node):
         self.create_timer(self.plan_period, self.plan_timer_cb,
                           callback_group=plan_group)
 
+        # One threat-spline publisher per sampled starting point.
         self.threat_splines_pubs = [
-            self.create_publisher(MarkerArray, '/predicted_opponent_splines_0', 10),
-            self.create_publisher(MarkerArray, '/predicted_opponent_splines_1', 10),
-            self.create_publisher(MarkerArray, '/predicted_opponent_splines_2', 10),
+            self.create_publisher(MarkerArray, f'/predicted_opponent_splines_{i}', 10)
+            for i in range(NUM_START_POINTS)
         ]
-        self.ego_lane_possibilities_pub = self.create_publisher(
-            MarkerArray, '/ego_lane_possibilities', 10)
+        # Chosen (lowest-average-TTC) defensive spline only.
+        self.ego_best_defensive_spline_pub = self.create_publisher(
+            MarkerArray, '/ego_best_defensive_spline', 10)
+        # Every candidate defensive spline (best highlighted green).
+        self.ego_candidate_splines_pub = self.create_publisher(
+            MarkerArray, '/ego_candidate_splines', 10)
+        # Number of opponent overtaking splines generated this cycle.
+        self.num_overtaking_splines_pub = self.create_publisher(
+            Int32, '/num_overtaking_splines', 10)
 
     # ------------------------------------------------------------------
     # Subscribers
@@ -88,41 +107,58 @@ class OpponentIntentPredictor(Node):
         self.points_seq += 1
 
     # ------------------------------------------------------------------
-    # Planning 
+    # Planning
     # ------------------------------------------------------------------
-    
+
     def plan_timer_cb(self):
         if not self.ego_data_received or self.latest_points is None:
             return
         if self.points_seq == self.planned_seq:
-            return                        
+            return
         self.planned_seq = self.points_seq
 
         points = self.latest_points
 
         if len(points) == 0: return
 
-        ex, ey, _ = self.ego_state       
+        ex, ey, _ = self.ego_state
 
         s_ego, d_ego = self.rutil.convert_to_frenet(ex, ey)
+
+        # Project the ego forward (constant velocity) by the most recent measured
+        # planning duration, so goals are placed where the ego will be once this
+        # planning cycle completes, not where it is right now at cycle start.
+        s_ego_goal = s_ego + self.ego_velocity * self.plan_duration_est
+
         starts = []
-        for (x, y) in points[:3]:
+        for (x, y) in points[:NUM_START_POINTS]:
             s_opp, d_opp = self.rutil.convert_to_frenet(x, y)
             starts.append((s_opp, d_opp))
 
         starts = np.asarray(starts, dtype=float)
 
+        plan_t0 = time.perf_counter()
         threat_paths, opponent_time_paths, max_ot_time = self.generate_opponent_splines_rrt(
-            starts, s_ego, d_ego)
+            starts, s_ego, d_ego, s_ego_goal)
+        # Feed the measured planning time into next cycle's projection horizon (EMA).
+        self.plan_duration_est += 0.3 * ((time.perf_counter() - plan_t0) - self.plan_duration_est)
+
         ego_time_paths = self.generate_ego_lane_possibilities(s_ego, d_ego, max_ot_time)
 
-        self.publish_threat_markers(threat_paths)
+        num_overtaking_splines = self.publish_threat_markers(threat_paths)
 
         best_ego_idx = self.find_best_defense_trajectory(opponent_time_paths, ego_time_paths)
-        if best_ego_idx is not None:
-            best = ego_time_paths[best_ego_idx]
-            ego_cart = self.rutil.convert_to_cartesian_arr(best[:, 1], best[:, 2])
-            self.publish_ego_lane_possibilities([ego_cart])
+
+        # Publish the defensive splines ONLY when overtaking splines were
+        # produced this cycle (same trigger as the threat markers) and a
+        # defensive lane was actually selected.
+        if num_overtaking_splines > 0 and best_ego_idx is not None:
+            ego_carts = [self.rutil.convert_to_cartesian_arr(p[:, 1], p[:, 2])
+                         for p in ego_time_paths]
+            # All candidates -> /ego_candidate_splines (best highlighted green).
+            self.publish_ego_candidate_splines(ego_carts, best_ego_idx)
+            # Best defence only -> /ego_best_defensive_spline.
+            self.publish_ego_best_defensive_spline([ego_carts[best_ego_idx]])
 
 
     def get_rrt_conditions(self, starts, s_ego, d_ego, goals):
@@ -133,21 +169,25 @@ class OpponentIntentPredictor(Node):
         goal_sets = []
         for s_clear in s_clearances:
             goal_sets.append(goals + np.array([s_clear + 1.0, 0.0]))
-        
+
         return {
             "s_clearances": s_clearances,
             "goals": np.array(goal_sets),
             "opp_ot_times": opp_ot_times
         }
 
-                
-    def generate_opponent_splines_rrt(self, starts, s_ego, d_ego):
+
+    def generate_opponent_splines_rrt(self, starts, s_ego, d_ego, s_ego_goal):
+        # The obstacle stays at the ego's CURRENT pose; the goals are built around
+        # the PROJECTED ego position (s_ego_goal) so they lead the ego correctly.
         self.planner.set_obstacles([(s_ego, d_ego)])
-        rrt_goals = np.column_stack((np.full(len(self.d_goals), s_ego), self.d_goals))
+        rrt_goals = np.column_stack((np.full(len(self.d_goals), s_ego_goal), self.d_goals))
 
         threat_paths = []
         opponent_time_paths = []
 
+        # Catch-up dynamics (opp_ot_times / s_clearances) are anchored at the
+        # CURRENT ego position; only the goal base is projected.
         rrt_conditions_dict = self.get_rrt_conditions(starts, s_ego, d_ego, rrt_goals)
         s_clearances = rrt_conditions_dict["s_clearances"]
         goals = rrt_conditions_dict["goals"]
@@ -159,7 +199,12 @@ class OpponentIntentPredictor(Node):
 
             # opponent already ahead of the goal -> nothing meaningful to plan
             if s_opp < s_ego - 0.5:
-                courses = self.planner.plan((s_opp, d_opp), goals[i], s_clearances[i], step=0.6)
+                # One dedicated RRT* tree per goal: every reachable goal in this
+                # start's goal set gets its own collision-free trajectory if one
+                # exists. step omitted -> the planner picks a dynamic step per
+                # goal, larger for goals that are farther away (see
+                # RRTStarPlanner.plan / _dynamic_step).
+                courses = self.planner.plan((s_opp, d_opp), goals[i], s_clearances[i])
                 for course in courses:
                     if course is None:
                         continue
@@ -175,16 +220,30 @@ class OpponentIntentPredictor(Node):
 
         return threat_paths, opponent_time_paths, max_ot_time
 
-    def generate_ego_lane_possibilities(self, s_ego, d_ego, max_ot_time):
-        """Constant-speed ego paths with a smooth lateral shift over the 2nd half."""
+    def _ego_lane_path(self, s_ego, d_ego, d_traj, max_ot_time):
+        """One constant-speed ego lane as a (path_resolution, 3) [t, s, d] array,
+        starting at (s_ego, d_ego) and shifting toward d_traj.
+
+        The lateral blend is concave up (u**2) and begins at t=0 with no flat
+        hold, so the divert is carried in the reference from the very start of
+        the path (the downstream controller sees the offset immediately) rather
+        than the previous ease-in/ease-out smoothstep that held d_ego for the
+        first 30% of the horizon. Caller guarantees max_ot_time > 0."""
         horizon = min(max_ot_time * self.ego_velocity, self.max_s_clearance)
         T = horizon / self.ego_velocity
         t = np.linspace(0.0, T, self.path_resolution)
-        u = np.clip((t / T - 0.5) / 0.5, 0.0, 1.0)
-        blend = u * u * (3.0 - 2.0 * u)          # smoothstep
+        u = t / T                                # no dead time: shift begins at t=0
+        blend = u * u                            # concave-up lateral profile
         s = s_ego + self.ego_velocity * t
+        return np.column_stack((t, s, d_ego + (d_traj - d_ego) * blend))
 
-        return [np.column_stack((t, s, d_ego + (d_traj - d_ego) * blend))
+    def generate_ego_lane_possibilities(self, s_ego, d_ego, max_ot_time):
+        """Constant-speed ego lanes fanning out to each candidate d. Returns []
+        for a degenerate (non-positive) horizon so selection/publishing cleanly
+        produce 'no defence'."""
+        if max_ot_time <= 1e-3:
+            return []
+        return [self._ego_lane_path(s_ego, d_ego, d_traj, max_ot_time)
                 for d_traj in self.ego_d_candidates]
 
 
@@ -282,22 +341,50 @@ class OpponentIntentPredictor(Node):
         return marker
 
     def publish_threat_markers(self, threat_paths):
-        colors = [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)]
+        """Publish the opponent overtaking splines and their count. Returns the
+        total number of overtaking splines generated this cycle."""
+        # One distinct colour per starting point (NUM_START_POINTS total).
+        colors = [
+            (1.0, 0.0, 0.0),   # red
+            (0.0, 1.0, 0.0),   # green
+            (0.0, 0.0, 1.0),   # blue
+            (1.0, 0.0, 1.0),   # magenta
+            (0.0, 1.0, 1.0),   # cyan
+        ]
         stamp = self.get_clock().now().to_msg()
-        for point_idx, point_paths in enumerate(threat_paths[:3]):
+        num_overtaking_splines = 0
+        for point_idx, point_paths in enumerate(threat_paths[:NUM_START_POINTS]):
             arr = MarkerArray()
             for idx, path in enumerate(point_paths):
                 arr.markers.append(self._line_marker(
                     f"opponent_threats_{point_idx}", idx, colors[point_idx], path, stamp))
             self.threat_splines_pubs[point_idx].publish(arr)
+            num_overtaking_splines += len(point_paths)
 
-    def publish_ego_lane_possibilities(self, ego_paths):
+        # Publish the total count of overtaking splines generated this cycle.
+        self.num_overtaking_splines_pub.publish(Int32(data=num_overtaking_splines))
+        return num_overtaking_splines
+
+    def publish_ego_best_defensive_spline(self, ego_paths):
+        """Publish the chosen (lowest average TTC) defensive spline on
+        /ego_best_defensive_spline."""
         stamp = self.get_clock().now().to_msg()
         arr = MarkerArray()
         for idx, path in enumerate(ego_paths):
             arr.markers.append(self._line_marker(
-                "ego_lane_possibilities", idx, (1.0, 1.0, 0.0), path, stamp))
-        self.ego_lane_possibilities_pub.publish(arr)
+                "ego_best_defensive_spline", idx, (1.0, 1.0, 0.0), path, stamp))
+        self.ego_best_defensive_spline_pub.publish(arr)
+
+    def publish_ego_candidate_splines(self, ego_paths, best_idx=None):
+        """Publish every candidate defensive spline on /ego_candidate_splines.
+        The best defence (lowest average TTC) is drawn in green, the rest yellow."""
+        stamp = self.get_clock().now().to_msg()
+        arr = MarkerArray()
+        for idx, path in enumerate(ego_paths):
+            rgb = (0.0, 1.0, 0.0) if idx == best_idx else (1.0, 1.0, 0.0)
+            arr.markers.append(self._line_marker(
+                "ego_candidate_splines", idx, rgb, path, stamp))
+        self.ego_candidate_splines_pub.publish(arr)
 
     @staticmethod
     def quat_to_yaw(q):
@@ -308,7 +395,7 @@ class OpponentIntentPredictor(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = OpponentIntentPredictor()
-    executor = MultiThreadedExecutor(num_threads=3)
+    executor = MultiThreadedExecutor(num_threads=2)
     executor.add_node(node)
     try:
         executor.spin()

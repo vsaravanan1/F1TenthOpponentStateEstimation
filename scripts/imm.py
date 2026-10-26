@@ -479,24 +479,24 @@ class IMMFilterNode(Node):
         self._frozen_path = None
 
     def publish_sampled_points(self, s_mean, s_std, d_mean, d_std):
-        s_values = np.random.normal(loc=s_mean, scale=s_std, size=10)
-        d_values = np.random.normal(loc=d_mean, scale=min(1/2, d_std), size=10)
-        d_values = np.clip(d_values, -0.8, 0.8)
-        frenet_points = [(s_values[i], d_values[i]) for i in range(s_values.shape[0])]
+        num_points = 5
+        max_attempts = 1000  # guard against a never-satisfiable acceptance region
+
+        # Same acceptance criterion as before, hoisted out of the loop.
+        s_lower = self._last_s
+        s_upper = self.last_ego_s - 0.1 * (self.last_ego_s - self._last_s)
 
         filtered_points_frenet = []
-        for point in frenet_points:
-            if point[0] >= self._last_s and point[0] <= (self.last_ego_s - 0.1*(self.last_ego_s - self._last_s)):
-                filtered_points_frenet.append(point)
-        
+        attempts = 0
+        while len(filtered_points_frenet) < num_points and attempts < max_attempts:
+            attempts += 1
+            s_sample = np.random.normal(loc=s_mean, scale=s_std)
+            d_sample = np.random.normal(loc=d_mean, scale=min(1/2, d_std))
+            d_sample = np.clip(d_sample, -0.8, 0.8)
+            if s_sample >= s_lower and s_sample <= s_upper:
+                filtered_points_frenet.append((s_sample, d_sample))
+
         cartesian_points = [tuple(self.racetrack_utilities.convert_to_cartesian(*frenet_point)) for frenet_point in filtered_points_frenet]
-
-        ego_x, ego_y = self.racetrack_utilities.convert_to_cartesian(self._last_s, self._last_d)
-
-
-        if len(cartesian_points) > 3:
-            cartesian_points.sort(key=lambda point : (point[0] - ego_x)**2 + (point[1] - ego_y)**2)
-            cartesian_points = cartesian_points[0:3]
 
         marker = Marker()
         marker.header.frame_id = "map"
@@ -526,7 +526,6 @@ class IMMFilterNode(Node):
         marker.lifetime = rclpy.duration.Duration(seconds=0.5).to_msg()
 
         self.opp_pos_pub.publish(marker)
-        
         
     def publish_covariance(self):
         # variance of s and variance of d, then randomly sample, since s and d are not correlated

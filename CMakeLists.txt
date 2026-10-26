@@ -127,10 +127,12 @@ install(PROGRAMS
   scripts/clustering_rf.py
   scripts/spielberg_centerline_publisher.py
   scripts/frenet_opp_state.py
+  scripts/diverse_opponent_trajectories_node.py
   # scripts/lstm_path_predictor.py
   scripts/imm_filterpy.py
   scripts/interceptor.py
   scripts/Overtake.py
+  scripts/spline_logger.py
   # scripts/lstm.py
   scripts/generate_candidate_trajectories.py
   DESTINATION lib/${PROJECT_NAME}
