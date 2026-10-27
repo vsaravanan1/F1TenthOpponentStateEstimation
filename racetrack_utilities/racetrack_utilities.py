@@ -6,6 +6,22 @@ from scipy.interpolate import splprep, splev
 
 
 class RacetrackUtilities:
+    """Frenet frame for a closed track given by a centerline CSV.
+
+    s is true arc length [m] along a smoothed centerline spline and d is the
+    signed perpendicular offset from it (positive = left). The spline is
+    parameterised so that u = s / arclength, so splev(s / arclength, ...) on
+    centerline_spline or racetrack_widths_spline evaluates at s, and
+    convert_to_frenet / convert_to_cartesian are exact inverses. s wraps at
+    arclength everywhere.
+    """
+
+    # splprep smoothing per point. The CSV is pixel-quantised (~6 cm grid); this keeps
+    # the spline within ~7 cm of it while removing the stair-step curvature noise
+    CENTERLINE_SMOOTHING = 0.0003
+    FRENET_SPACING = 0.01   # [m] spacing of the dense centerline samples used for projection
+    REFIT_SPACING = 0.1     # [m] sample spacing for the arc-length re-parameterisation
+
     def __init__(self, csv_file):
         self.centerline_tree = None
         self.centerline = None
@@ -14,11 +30,11 @@ class RacetrackUtilities:
         centerline_shape = self.parse_csv(csv_file)
         self.num_points = centerline_shape[0]
 
-        u, tck, arclength, tck_widths = self.create_centerline_splines()
-        self.centerline_s_norm = u
-        self.centerline_spline = tck
-        self.racetrack_widths_spline = tck_widths
-        self.arclength = arclength
+        self.centerline_spline, self.arclength = self.create_centerline_spline()
+        self.build_frenet_lookup()
+        # s / arclength of each CSV centerline point in this frame
+        self.centerline_s_norm = self.convert_to_frenet_arr(self.centerline)[:, 0] / self.arclength
+        self.racetrack_widths_spline = self.create_widths_spline()
 
     def parse_csv(self, csv_file):
         raceline_df = pd.read_csv(csv_file)
@@ -27,47 +43,86 @@ class RacetrackUtilities:
         self.centerline_tree = KDTree(self.centerline)
         return self.centerline.shape
 
-    def create_centerline_splines(self):
-        segment_lengths = np.linalg.norm(np.diff(self.centerline, axis=0), axis=1)
-        cumlen = np.concatenate([[0], np.cumsum(segment_lengths)])
-        total_arclength = cumlen[-1]
-        u = cumlen / total_arclength
-
+    def create_centerline_spline(self):
+        """Smoothed periodic centerline spline with u = s / arclength."""
+        # closed loop: repeat the first point so the closing segment is part of the fit
+        loop = np.vstack([self.centerline, self.centerline[:1]])
+        chord = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(loop, axis=0), axis=1))])
         m = len(self.centerline)
-        tck, _ = splprep([self.centerline[:, 0], self.centerline[:, 1]], u=u, s=m*0.02, k=3, per=True)
-        tck_widths, _ = splprep([self.racetrack_widths[:, 0], self.racetrack_widths[:, 1]], u=u, s=0, k=3, per=True)
-        return u, tck, total_arclength, tck_widths
+        rough, _ = splprep([loop[:, 0], loop[:, 1]], u=chord / chord[-1],
+                           s=m * self.CENTERLINE_SMOOTHING, k=3, per=True)
+
+        # true arc length of the smoothed curve, then refit with u = s / arclength
+        u_dense = np.linspace(0.0, 1.0, 20 * m + 1)
+        pts = np.column_stack(splev(u_dense, rough))
+        s_dense = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))])
+        arclength = s_dense[-1]
+
+        s_fit = np.linspace(0.0, arclength, int(arclength / self.REFIT_SPACING) + 1)
+        x_fit, y_fit = splev(np.interp(s_fit, s_dense, u_dense), rough)
+        tck, _ = splprep([x_fit, y_fit], u=s_fit / arclength, s=0, k=3, per=True)
+        return tck, arclength
+
+    def build_frenet_lookup(self):
+        """Dense centerline samples + KDTree for convert_to_frenet_arr."""
+        u = np.linspace(0.0, 1.0, int(self.arclength / self.FRENET_SPACING), endpoint=False)
+        self._lookup_s = u * self.arclength
+        self._lookup_xy = np.column_stack(splev(u, self.centerline_spline))
+        dx, dy = splev(u, self.centerline_spline, der=1)
+        mag = np.hypot(dx, dy)
+        self._lookup_tangent = np.column_stack([dx / mag, dy / mag])
+        self._lookup_kappa = self.curvature(u)
+        self._lookup_tree = KDTree(self._lookup_xy)
+
+    def create_widths_spline(self):
+        """Periodic spline of [left, right] track half-widths over u = s / arclength.
+
+        The CSV widths are measured from the CSV's own pixel-quantised centerline,
+        so the walls are rebuilt in cartesian from it and measured again from the
+        smoothed centerline.
+        """
+        nx, ny = self._normals(self.centerline_s_norm)
+        normals = np.column_stack([nx, ny])
+        left_wall = self.centerline + self.racetrack_widths[:, [0]] * normals
+        right_wall = self.centerline - self.racetrack_widths[:, [1]] * normals
+
+        s_grid = np.linspace(0.0, self.arclength, self.num_points, endpoint=False)
+        widths = []
+        for wall, sign in ((left_wall, 1.0), (right_wall, -1.0)):
+            sd = self.convert_to_frenet_arr(wall)
+            order = np.argsort(sd[:, 0])
+            widths.append(sign * np.interp(s_grid, sd[order, 0], sd[order, 1], period=self.arclength))
+        left, right = widths
+
+        u = np.append(s_grid, self.arclength) / self.arclength
+        tck_widths, _ = splprep([np.append(left, left[0]), np.append(right, right[0])], u=u,
+                                s=self.num_points * 1e-4, k=3, per=True)
+        return tck_widths
+
+    def _normals(self, s_norm):
+        dx, dy = splev(s_norm, self.centerline_spline, der=1)
+        mag = np.hypot(dx, dy)
+        return -dy / mag, dx / mag   # left-pointing
 
     def _get_normal(self, s_norm):
-        dx, dy = splev(s_norm, self.centerline_spline, der=1)
-        tangent = np.array([dx, dy])
-        tangent = tangent / np.linalg.norm(tangent)
-        normal = np.array([-tangent[1], tangent[0]])
-        return normal
+        return np.array(self._normals(s_norm))
 
     def convert_to_cartesian(self, s, d):
-        s_norm = np.clip(s / self.arclength, 0.0, 1.0)
+        s_norm = np.mod(s / self.arclength, 1.0)
         cx, cy = splev(s_norm, self.centerline_spline, der=0)
         centerline_point = np.array([cx, cy])
         normal = self._get_normal(s_norm)
         return centerline_point + d * normal
 
     def convert_to_frenet(self, x, y):
-        query_point = np.array([x, y])
-        d, idx = self.centerline_tree.query(query_point)
-        s_norm = self.centerline_s_norm[idx]
-        s = s_norm * self.arclength
-        normal = self._get_normal(s_norm)
-        diff = query_point - self.centerline[idx]
-        d_signed = np.sign(np.dot(diff, normal)) * d
-        return np.array([s, d_signed])
+        return self.convert_to_frenet_arr([[x, y]])[0]
 
     def convert_to_cartesian_arr(self, s_arr, d_arr):
         """Vectorized convert_to_cartesian.
 
         Parameters
         ----------
-        s_arr : (N,) array-like  – arc-length positions along the centerline
+        s_arr : (N,) array-like  – arc-length positions along the centerline (wrapped at arclength)
         d_arr : (N,) array-like  – signed lateral offsets (positive = left)
 
         Returns
@@ -77,21 +132,17 @@ class RacetrackUtilities:
         s_arr = np.asarray(s_arr, dtype=float)
         d_arr = np.asarray(d_arr, dtype=float)
 
-        s_norm = np.clip(s_arr / self.arclength, 0.0, 1.0)
+        s_norm = np.mod(s_arr / self.arclength, 1.0)
 
         cx, cy = splev(s_norm, self.centerline_spline, der=0)
-        dx, dy = splev(s_norm, self.centerline_spline, der=1)
-
-        mag = np.hypot(dx, dy)
-        nx = -dy / mag   # left-pointing normal, matching _get_normal
-        ny =  dx / mag
+        nx, ny = self._normals(s_norm)
 
         x = cx + d_arr * nx
         y = cy + d_arr * ny
         return np.column_stack([x, y])
 
     def convert_to_frenet_arr(self, xy_arr):
-        """Vectorized convert_to_frenet.
+        """Vectorized convert_to_frenet: closest-point projection onto the centerline spline.
 
         Parameters
         ----------
@@ -99,23 +150,24 @@ class RacetrackUtilities:
 
         Returns
         -------
-        sd : (N, 2) ndarray  – Frenet [s, d_signed] for each input point
+        sd : (N, 2) ndarray  – Frenet [s, d_signed] for each input point, s in [0, arclength)
         """
-        xy_arr = np.asarray(xy_arr, dtype=float)
+        xy_arr = np.asarray(xy_arr, dtype=float).reshape(-1, 2)
 
-        distances, indices = self.centerline_tree.query(xy_arr)   # (N,), (N,)
+        _, idx = self._lookup_tree.query(xy_arr)
+        r = xy_arr - self._lookup_xy[idx]
+        tx, ty = self._lookup_tangent[idx, 0], self._lookup_tangent[idx, 1]
+        kappa = self._lookup_kappa[idx]
+        along = r[:, 0] * tx + r[:, 1] * ty
+        across = -r[:, 0] * ty + r[:, 1] * tx
 
-        s_norm = self.centerline_s_norm[indices]                  # (N,)
-        s      = s_norm * self.arclength                          # (N,)
-
-        dx, dy = splev(s_norm, self.centerline_spline, der=1)
-        mag    = np.hypot(dx, dy)
-        nx     = -dy / mag                                        # (N,)
-        ny     =  dx / mag
-
-        diff          = xy_arr - self.centerline[indices]         # (N, 2)
-        dot_products  = diff[:, 0] * nx + diff[:, 1] * ny        # (N,)
-        d_signed      = np.sign(dot_products) * distances         # (N,)
+        # Expanding the centerline about the nearest sample to second order
+        # (C(s_i + h) ~ C_i + T h + kappa N h^2 / 2), the foot of the perpendicular
+        # is at h = along / (1 - kappa * across). Clamped because past the centre of
+        # curvature (kappa * d >= 1) the projection isn't unique.
+        h = along / np.maximum(1.0 - kappa * across, 0.2)
+        s = np.mod(self._lookup_s[idx] + h, self.arclength)
+        d_signed = across - 0.5 * kappa * h**2 * (1.0 - kappa * across)
 
         return np.column_stack([s, d_signed])
 
@@ -131,10 +183,7 @@ class RacetrackUtilities:
 
     def _offset_points(self, s_norm, d):
         cx, cy = splev(s_norm, self.centerline_spline, der=0)
-        dx, dy = splev(s_norm, self.centerline_spline, der=1)
-        mag = np.hypot(dx, dy)
-        nx = -dy / mag
-        ny = dx / mag
+        nx, ny = self._normals(s_norm)
         return cx + d * nx, cy + d * ny
 
     def region_polyline(self, s, ds, d, num_points=20):
@@ -195,7 +244,7 @@ class RacetrackUtilities:
         return fan, d_values
 
     def in_bounds_frenet(self, s, d):
-        s_norm = np.clip(s / self.arclength, 0.0, 1.0)
+        s_norm = np.mod(s / self.arclength, 1.0)
         left_width, right_width = splev(s_norm, self.racetrack_widths_spline, der=0)
         return -right_width < d < left_width
 

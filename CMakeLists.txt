@@ -135,6 +135,7 @@ install(PROGRAMS
   scripts/spline_logger.py
   # scripts/lstm.py
   scripts/generate_candidate_trajectories.py
+  scripts/stackelberg.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

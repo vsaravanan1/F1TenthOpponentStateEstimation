@@ -16,6 +16,7 @@ from std_msgs.msg import Int32
 from scipy.interpolate import make_smoothing_spline
 from racetrack_utilities.racetrack_utilities import RacetrackUtilities
 from rrt_planner.rrt_planner import RRTStarPlanner
+from stackelberg import pick_trajectory
 
 # Number of sampled opponent starting points we accept per planning cycle.
 NUM_START_POINTS = 5
@@ -34,7 +35,9 @@ class OpponentIntentPredictor(Node):
         self.ego_velocity = 1.5
         self.d_goals = np.linspace(-0.8, 0.8, 5)
         self.d_clear = 0.5
-        self.ego_d_candidates = np.linspace(-0.9, 0.9, 5)
+        # +-0.65 still leaves < a car width (0.31 m) to the wall, so the outer lanes fully block,
+        # and < 1% of them put the car's footprint into the wall; from +-0.75 up, short lanes mostly do
+        self.ego_d_candidates = np.linspace(-0.65, 0.65, 5)
         self.d_limit = 0.8
         self.smoothing_lam = 0.5      # make_smoothing_spline lam (t normalised to [0, 1])
         self.n_fit_points = 40       # RRT polyline is resampled to this many points (must be >= 5)
@@ -83,7 +86,7 @@ class OpponentIntentPredictor(Node):
             self.create_publisher(MarkerArray, f'/predicted_opponent_splines_{i}', 10)
             for i in range(NUM_START_POINTS)
         ]
-        # Chosen (lowest-average-TTC) defensive spline only.
+        # Chosen (Stackelberg pick) defensive spline only.
         self.ego_best_defensive_spline_pub = self.create_publisher(
             MarkerArray, '/ego_best_defensive_spline', 10)
         # Every candidate defensive spline (best highlighted green).
@@ -147,7 +150,12 @@ class OpponentIntentPredictor(Node):
 
         num_overtaking_splines = self.publish_threat_markers(threat_paths)
 
-        best_ego_idx = self.find_best_defense_trajectory(opponent_time_paths, ego_time_paths)
+        # Every overtaking path from every starting point is one opponent option.
+        opponent_paths = [path for point_paths in opponent_time_paths for path in point_paths]
+        best_ego_idx = None
+        if opponent_paths and ego_time_paths:
+            best_ego_idx = pick_trajectory(ego_time_paths, opponent_paths,
+                                           self.ego_velocity, self.opponent_velocity, self.rutil)
 
         # Publish the defensive splines ONLY when overtaking splines were
         # produced this cycle (same trigger as the threat markers) and a
@@ -238,13 +246,15 @@ class OpponentIntentPredictor(Node):
         return np.column_stack((t, s, d_ego + (d_traj - d_ego) * blend))
 
     def generate_ego_lane_possibilities(self, s_ego, d_ego, max_ot_time):
-        """Constant-speed ego lanes fanning out to each candidate d. Returns []
-        for a degenerate (non-positive) horizon so selection/publishing cleanly
-        produce 'no defence'."""
+        """Constant-speed ego lanes fanning out to each candidate d, plus (at
+        index 0) one that holds d_ego and only moves forward in s -- the
+        non-deviating option pick_trajectory weighs defending against. Returns
+        [] for a degenerate (non-positive) horizon so selection/publishing
+        cleanly produce 'no defence'."""
         if max_ot_time <= 1e-3:
             return []
         return [self._ego_lane_path(s_ego, d_ego, d_traj, max_ot_time)
-                for d_traj in self.ego_d_candidates]
+                for d_traj in [d_ego, *self.ego_d_candidates]]
 
 
     def path_to_time_trajectory(self, P, velocity):
@@ -276,48 +286,6 @@ class OpponentIntentPredictor(Node):
         ts = np.linspace(0.0, t[-1], self.path_resolution)
         return np.column_stack((ts, np.interp(ts, t, Q[:, 0]), np.interp(ts, t, Q[:, 1])))
 
-    # ------------------------------------------------------------------
-    # Collision / selection
-    # ------------------------------------------------------------------
-    def find_best_defense_trajectory(self, opponent_paths, ego_paths):
-        """Ego trajectory with the smallest average TTC over all colliding
-        (ego, opponent) pairs across all starting points."""
-        if len(opponent_paths) == 0 or len(ego_paths) == 0:
-            return None
-
-        average_ttc = []
-        for ego_path in ego_paths:
-            collision_times = []
-            for starting_point_paths in opponent_paths:
-                for opponent_path in starting_point_paths:
-                    ttc = self.find_time_to_collision(opponent_path, ego_path)
-                    if ttc is not None:
-                        collision_times.append(ttc)
-            average_ttc.append(np.mean(collision_times) if collision_times else np.inf)
-
-        if all(np.isinf(v) for v in average_ttc):
-            return None
-        return int(np.argmin(average_ttc))
-
-    def find_time_to_collision(self, opponent_path, ego_path, n_samples=150):
-        if len(opponent_path) == 0 or len(ego_path) == 0:
-            return None
-
-        ot, et = opponent_path[:, 0], ego_path[:, 0]
-        start_time = max(ot[0], et[0])
-        end_time = min(ot[-1], et[-1])
-        if start_time > end_time:
-            return None
-
-        times = np.linspace(start_time, end_time, n_samples)
-        ds = np.interp(times, ot, opponent_path[:, 1]) - np.interp(times, et, ego_path[:, 1])
-        dd = np.interp(times, ot, opponent_path[:, 2]) - np.interp(times, et, ego_path[:, 2])
-
-        hits = np.nonzero((np.abs(ds) < 0.3) & (np.abs(dd) < 0.25))[0]
-        if len(hits) == 0:
-            return None
-        return float(times[hits[0]])
-        
     # ------------------------------------------------------------------
     # Publishing
     # ------------------------------------------------------------------
@@ -366,7 +334,7 @@ class OpponentIntentPredictor(Node):
         return num_overtaking_splines
 
     def publish_ego_best_defensive_spline(self, ego_paths):
-        """Publish the chosen (lowest average TTC) defensive spline on
+        """Publish the chosen (Stackelberg pick) defensive spline on
         /ego_best_defensive_spline."""
         stamp = self.get_clock().now().to_msg()
         arr = MarkerArray()
@@ -377,7 +345,7 @@ class OpponentIntentPredictor(Node):
 
     def publish_ego_candidate_splines(self, ego_paths, best_idx=None):
         """Publish every candidate defensive spline on /ego_candidate_splines.
-        The best defence (lowest average TTC) is drawn in green, the rest yellow."""
+        The best defence (Stackelberg pick) is drawn in green, the rest yellow."""
         stamp = self.get_clock().now().to_msg()
         arr = MarkerArray()
         for idx, path in enumerate(ego_paths):
