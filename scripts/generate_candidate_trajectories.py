@@ -17,6 +17,8 @@ from scipy.interpolate import make_smoothing_spline
 from racetrack_utilities.racetrack_utilities import RacetrackUtilities
 from rrt_planner.rrt_planner import RRTStarPlanner
 from stackelberg import pick_trajectory
+from diverse_opponent_trajectories_node import (Roadmap, build_roadmap_from_splines, diverse_roadmap_search,
+                                                path_to_xy as roadmap_path_to_xy, bspline_smooth)
 
 # Number of sampled opponent starting points we accept per planning cycle.
 NUM_START_POINTS = 5
@@ -42,6 +44,16 @@ class OpponentIntentPredictor(Node):
         self.smoothing_lam = 0.5      # make_smoothing_spline lam (t normalised to [0, 1])
         self.n_fit_points = 40       # RRT polyline is resampled to this many points (must be >= 5)
         self.max_s_clearance = 5.0
+
+        # roadmap search over the RRT* opponent paths (same values as diverse_opponent_trajectories_node)
+        self.roadmap_k = 3                # diverse opponent trajectories fed to the Stackelberg game
+        self.roadmap_max_overlap = 0.5
+        self.roadmap_candidate_pool = 25
+        self.roadmap_node_res = 0.20      # m, interior fusion grid
+        self.roadmap_goal_res = 0.60      # m, endpoint clustering grid
+        self.roadmap_min_spline_len = 0.30
+        self.roadmap_smooth_points = 40   # resampled points per diverse trajectory
+        self.roadmap_smooth_s = 0.3       # B-spline smoothing factor
 
         self.rutil = RacetrackUtilities("/sim_ws/src/lidar_processing/scripts/Spielberg_map.csv")
         self.planner = RRTStarPlanner(max_iter=500, d_limit=self.d_limit, d_clear=self.d_clear,
@@ -98,6 +110,9 @@ class OpponentIntentPredictor(Node):
         # Number of opponent overtaking splines generated this cycle.
         self.num_overtaking_splines_pub = self.create_publisher(
             Int32, '/num_overtaking_splines', 10)
+        # Roadmap-search output: the opponent trajectories the Stackelberg game uses.
+        self.diverse_trajectories_pub = self.create_publisher(
+            MarkerArray, '/diverse_opponent_trajectories', 10)
 
     # ------------------------------------------------------------------
     # Subscribers
@@ -157,8 +172,9 @@ class OpponentIntentPredictor(Node):
 
         num_overtaking_splines = self.publish_threat_markers(threat_paths)
 
-        # Every overtaking path from every starting point is one opponent option.
-        opponent_paths = [path for point_paths in opponent_time_paths for path in point_paths]
+        # The roadmap search's diverse trajectories are the opponent's options.
+        opponent_paths = self.diverse_opponent_paths(threat_paths)
+        self.publish_diverse_trajectories(opponent_paths)
         best_ego_idx = None
         if opponent_paths and ego_time_paths:
             best_ego_idx = pick_trajectory(ego_time_paths, opponent_paths,
@@ -167,9 +183,12 @@ class OpponentIntentPredictor(Node):
         # Feed the measured cycle time into next cycle's projection (EMA).
         cycle_time = time.perf_counter() - cycle_t0
         self.plan_duration_est += 0.3 * (cycle_time - self.plan_duration_est)
+        # markers must outlive the gap to the next cycle or they blink off between cycles
+        self.marker_lifetime = max(3.5 * self.plan_period, 1.5 * self.plan_duration_est)
         self.get_logger().info(
             f"planning cycle {1e3 * cycle_time:.0f} ms, projected ego {ego_speed * lead:.2f} m ahead "
-            f"({ego_speed:.2f} m/s x {1e3 * lead:.0f} ms)", throttle_duration_sec=1.0)
+            f"({ego_speed:.2f} m/s x {1e3 * lead:.0f} ms), {num_overtaking_splines} RRT* paths -> "
+            f"{len(opponent_paths)} diverse opponent trajectories", throttle_duration_sec=1.0)
 
         # Publish the defensive splines ONLY when overtaking splines were
         # produced this cycle (same trigger as the threat markers) and a
@@ -241,6 +260,34 @@ class OpponentIntentPredictor(Node):
             opponent_time_paths.append(point_time_paths)
 
         return threat_paths, opponent_time_paths, max_ot_time
+
+    def diverse_opponent_paths(self, threat_paths):
+        """Roadmap search over this cycle's RRT* paths: fuse every start's paths
+        into one Roadmap and return up to roadmap_k edge-diverse trajectories as
+        smoothed (roadmap_smooth_points, 2) cartesian arrays."""
+        splines = [np.asarray(path) for point_paths in threat_paths for path in point_paths]
+        if not splines:
+            return []
+
+        roadmap, goals = build_roadmap_from_splines(
+            splines, self.roadmap_node_res, self.roadmap_goal_res, self.roadmap_min_spline_len)
+        if not goals or not roadmap.neighbors(Roadmap.START):
+            return []
+
+        try:
+            accepted = diverse_roadmap_search(
+                roadmap, Roadmap.START, goals, k=self.roadmap_k,
+                max_overlap=self.roadmap_max_overlap, candidate_pool=self.roadmap_candidate_pool)
+        except Exception as e:  # never let a graph edge-case kill the node
+            self.get_logger().warn(f"diverse search failed: {e}")
+            return []
+
+        polylines = []
+        for path, _cost in accepted:
+            xy = roadmap_path_to_xy(roadmap, path)
+            if xy.shape[0] >= 2:
+                polylines.append(bspline_smooth(xy, self.roadmap_smooth_points, self.roadmap_smooth_s))
+        return polylines
 
     def _ego_lane_path(self, s_ego, d_ego, d_traj, max_ot_time):
         """One constant-speed ego lane as a (path_resolution, 3) [t, s, d] array,
@@ -346,6 +393,23 @@ class OpponentIntentPredictor(Node):
         # Publish the total count of overtaking splines generated this cycle.
         self.num_overtaking_splines_pub.publish(Int32(data=num_overtaking_splines))
         return num_overtaking_splines
+
+    def publish_diverse_trajectories(self, polylines):
+        """Publish the roadmap-search opponent trajectories on
+        /diverse_opponent_trajectories, clearing the previous cycle's first."""
+        colors = [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.3, 1.0)]
+        stamp = self.get_clock().now().to_msg()
+        arr = MarkerArray()
+        clear = Marker()
+        clear.header.frame_id = "map"
+        clear.header.stamp = stamp
+        clear.ns = "diverse_opponent_traj"
+        clear.action = Marker.DELETEALL
+        arr.markers.append(clear)
+        for idx, xy in enumerate(polylines):
+            arr.markers.append(self._line_marker(
+                "diverse_opponent_traj", idx, colors[idx % len(colors)], xy, stamp))
+        self.diverse_trajectories_pub.publish(arr)
 
     def publish_ego_best_defensive_spline(self, ego_paths):
         """Publish the chosen (Stackelberg pick) defensive spline on
