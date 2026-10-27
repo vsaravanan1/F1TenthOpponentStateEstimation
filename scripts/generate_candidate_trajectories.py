@@ -47,12 +47,15 @@ class OpponentIntentPredictor(Node):
         self.planner = RRTStarPlanner(max_iter=500, d_limit=self.d_limit, d_clear=self.d_clear,
                                       time_budget=0.2, step_target_hops=12, step_min=0.5, step_max=3.0)
 
-        # EMA of measured planning wall-time [s]. Used to project the ego pose
-        # forward (constant velocity) so goals land where the ego will be once
-        # this planning cycle finishes, not where it is at cycle start.
-        self.plan_duration_est = self.planner.time_budget
+        # EMA of the measured wall-time of a whole planning cycle [s], from reading
+        # the poses to publishing. Both cars are projected forward by it so the
+        # cycle plans (and publishes) for where they will be when it finishes,
+        # not where they were when it started. Seeded with the RRT* worst case:
+        # time_budget applies per plan() call, i.e. per starting point.
+        self.plan_duration_est = self.planner.time_budget * NUM_START_POINTS
 
         self.ego_state = (0.0, 0.0, 0.0)
+        self.ego_speed = 0.0              # measured, from odom
         self.ego_data_received = False
         self.latest_points = None
         self.latest_stamp = None
@@ -102,6 +105,7 @@ class OpponentIntentPredictor(Node):
     def ego_odom_callback(self, msg):
         p = msg.pose.pose.position
         self.ego_state = (p.x, p.y, self.quat_to_yaw(msg.pose.pose.orientation))
+        self.ego_speed = msg.twist.twist.linear.x
         self.ego_data_received = True
 
     def starting_points_cb(self, msg: Marker):
@@ -124,27 +128,30 @@ class OpponentIntentPredictor(Node):
 
         if len(points) == 0: return
 
+        cycle_t0 = time.perf_counter()
         ex, ey, _ = self.ego_state
+        ego_speed = self.ego_speed
 
         s_ego, d_ego = self.rutil.convert_to_frenet(ex, ey)
 
-        # Project the ego forward (constant velocity) by the most recent measured
-        # planning duration, so goals are placed where the ego will be once this
-        # planning cycle completes, not where it is right now at cycle start.
-        s_ego_goal = s_ego + self.ego_velocity * self.plan_duration_est
+        # Project both cars forward (constant velocity, along s) by the expected
+        # cycle duration: the ego lanes, the RRT* obstacle and goals, and the
+        # opponent starts all describe the moment this cycle publishes. Without
+        # it everything is published one cycle late and the car is already past
+        # the start of its own lanes.
+        lead = self.plan_duration_est
+        s_ego += ego_speed * lead
+        s_ego_goal = s_ego
 
         starts = []
         for (x, y) in points[:NUM_START_POINTS]:
             s_opp, d_opp = self.rutil.convert_to_frenet(x, y)
-            starts.append((s_opp, d_opp))
+            starts.append((s_opp + self.opponent_velocity * lead, d_opp))
 
         starts = np.asarray(starts, dtype=float)
 
-        plan_t0 = time.perf_counter()
         threat_paths, opponent_time_paths, max_ot_time = self.generate_opponent_splines_rrt(
             starts, s_ego, d_ego, s_ego_goal)
-        # Feed the measured planning time into next cycle's projection horizon (EMA).
-        self.plan_duration_est += 0.3 * ((time.perf_counter() - plan_t0) - self.plan_duration_est)
 
         ego_time_paths = self.generate_ego_lane_possibilities(s_ego, d_ego, max_ot_time)
 
@@ -156,6 +163,13 @@ class OpponentIntentPredictor(Node):
         if opponent_paths and ego_time_paths:
             best_ego_idx = pick_trajectory(ego_time_paths, opponent_paths,
                                            self.ego_velocity, self.opponent_velocity, self.rutil)
+
+        # Feed the measured cycle time into next cycle's projection (EMA).
+        cycle_time = time.perf_counter() - cycle_t0
+        self.plan_duration_est += 0.3 * (cycle_time - self.plan_duration_est)
+        self.get_logger().info(
+            f"planning cycle {1e3 * cycle_time:.0f} ms, projected ego {ego_speed * lead:.2f} m ahead "
+            f"({ego_speed:.2f} m/s x {1e3 * lead:.0f} ms)", throttle_duration_sec=1.0)
 
         # Publish the defensive splines ONLY when overtaking splines were
         # produced this cycle (same trigger as the threat markers) and a
@@ -186,16 +200,16 @@ class OpponentIntentPredictor(Node):
 
 
     def generate_opponent_splines_rrt(self, starts, s_ego, d_ego, s_ego_goal):
-        # The obstacle stays at the ego's CURRENT pose; the goals are built around
-        # the PROJECTED ego position (s_ego_goal) so they lead the ego correctly.
+        # The obstacle sits at s_ego and the goals are built around s_ego_goal
+        # (plan_timer_cb passes the same projected position for both).
         self.planner.set_obstacles([(s_ego, d_ego)])
         rrt_goals = np.column_stack((np.full(len(self.d_goals), s_ego_goal), self.d_goals))
 
         threat_paths = []
         opponent_time_paths = []
 
-        # Catch-up dynamics (opp_ot_times / s_clearances) are anchored at the
-        # CURRENT ego position; only the goal base is projected.
+        # Catch-up dynamics (opp_ot_times / s_clearances) use the gap between
+        # the (projected) ego and opponent starts.
         rrt_conditions_dict = self.get_rrt_conditions(starts, s_ego, d_ego, rrt_goals)
         s_clearances = rrt_conditions_dict["s_clearances"]
         goals = rrt_conditions_dict["goals"]
